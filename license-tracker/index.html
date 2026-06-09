@@ -1,0 +1,891 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UCAPS License &amp; Maintenance Renewal Tracker</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{ --navy:#0a2240; --ink:#1c2230; --paper:#f4f1ea; --card:#fffdf8; --line:#e3ddd0;
+  --lic:#1f5d86; --maint:#2f7d4f; --amber:#9a5b00; }
+*{ box-sizing:border-box; }
+body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); background:var(--paper);
+  -webkit-font-smoothing:antialiased; }
+.mono{ font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums; }
+.small{ font-size:12px; } .ar{ text-align:right; } .ac{ text-align:center; }
+
+.hdr{ position:relative; background:linear-gradient(135deg,#0a2240 0%,#102d54 55%,#0d3a5c 100%); color:#f4f1ea; overflow:hidden; }
+.hdr-grain{ position:absolute; inset:0; opacity:.06; background-image:radial-gradient(#fff 1px,transparent 1px); background-size:4px 4px; }
+.hdr-inner{ position:relative; max-width:1120px; margin:0 auto; padding:38px 28px 30px; }
+.hdr-rule{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:#9fc4e4; font-weight:600; }
+.hdr h1{ font-family:'Fraunces',serif; font-weight:600; font-size:46px; line-height:1.02; margin:12px 0 0; letter-spacing:-.01em; }
+.hdr h1 em{ font-style:italic; font-weight:500; color:#bcd9f2; }
+.hdr-meta{ margin-top:16px; font-size:13px; color:#cfe0ef; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.hdr-meta .dot{ opacity:.5; }
+.savechip{ margin-left:6px; background:#1f6b43; color:#eafff2; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; opacity:0; transition:opacity .2s; }
+.savechip.show{ opacity:1; }
+
+.wrap{ max-width:1120px; margin:0 auto; padding:26px 28px 70px; }
+
+.stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:-46px; position:relative; z-index:2; }
+.statcard{ background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 18px 16px; position:relative; box-shadow:0 10px 30px -18px rgba(10,34,64,.45); overflow:hidden; }
+.st-bar{ position:absolute; top:0; left:0; right:0; height:4px; }
+.st-label{ font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:#7d7563; font-weight:600; }
+.st-value{ font-family:'Fraunces',serif; font-size:30px; font-weight:600; margin-top:8px; letter-spacing:-.01em; }
+.st-sub{ font-size:12px; color:#8b8472; margin-top:3px; }
+
+.sec-head{ display:flex; align-items:baseline; justify-content:space-between; margin:30px 2px 14px; }
+.sec-head h2{ font-family:'Fraunces',serif; font-weight:600; font-size:22px; margin:0; color:var(--navy); }
+.sec-head span{ font-size:12px; color:#8b8472; }
+
+.radar-track{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; }
+.radar-card{ text-align:left; background:var(--card); border:1px solid var(--line); border-top:3px solid; border-radius:10px; padding:12px 12px 13px; cursor:pointer; display:flex; flex-direction:column; gap:4px; transition:transform .12s ease, box-shadow .12s ease; font-family:inherit; }
+.radar-card:hover{ transform:translateY(-3px); box-shadow:0 12px 24px -16px rgba(10,34,64,.5); }
+.rc-days{ align-self:flex-start; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; font-family:'IBM Plex Mono',monospace; }
+.rc-vendor{ font-weight:600; font-size:14px; color:var(--ink); margin-top:2px; }
+.rc-date{ font-size:11px; color:#8b8472; }
+.rc-amt{ font-family:'IBM Plex Mono',monospace; font-size:13px; font-weight:600; color:var(--navy); }
+
+.controls{ display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end; margin:30px 0 12px; }
+.search{ flex:1; min-width:220px; padding:10px 14px; border:1px solid var(--line); border-radius:9px; font-family:inherit; font-size:14px; background:var(--card); }
+.search:focus{ outline:none; border-color:var(--navy); }
+.ctrl{ display:flex; flex-direction:column; gap:5px; }
+.ctrl label{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:#8b8472; font-weight:600; }
+.ctrl select{ padding:9px 12px; border:1px solid var(--line); border-radius:9px; font-family:inherit; font-size:13px; background:var(--card); cursor:pointer; }
+.seg{ display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; background:var(--card); }
+.seg button{ border:none; background:transparent; padding:9px 13px; font-family:inherit; font-size:13px; cursor:pointer; color:#6b6453; }
+.seg button.on{ background:var(--navy); color:#fff; font-weight:600; }
+.ctrl-actions{ display:flex; gap:8px; margin-left:auto; }
+
+.btn{ font-family:inherit; cursor:pointer; border-radius:9px; font-size:13px; font-weight:600; border:1px solid var(--line); padding:9px 14px; background:var(--card); color:var(--navy); transition:all .12s ease; }
+.btn:hover{ border-color:var(--navy); }
+.btn.solid{ background:var(--navy); color:#fff; border-color:var(--navy); text-decoration:none; display:inline-block; }
+.btn.solid:hover{ background:#0d2c54; }
+.btn.ghost{ background:transparent; }
+.btn.tiny{ padding:5px 11px; font-size:12px; }
+.btn.wide{ width:100%; margin-top:18px; padding:13px; font-size:14px; }
+
+.tbl{ background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+.tr{ display:grid; grid-template-columns:2.4fr .65fr 1fr 1fr .8fr 1.3fr .8fr; align-items:center; gap:10px; padding:13px 18px; }
+.th{ background:#efe9dd; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:#7d7563; font-weight:700; }
+.row{ border-top:1px solid var(--line); transition:background .1s ease; }
+.row:hover{ background:#faf7f0; }
+.cell-vendor{ cursor:pointer; display:flex; flex-direction:column; gap:2px; }
+.v-name{ font-weight:600; font-size:14px; color:var(--navy); }
+.v-desc{ font-size:12px; color:#7d7563; line-height:1.35; }
+.tag{ font-size:10px; font-weight:700; padding:3px 8px; border-radius:5px; letter-spacing:.03em; display:inline-block; }
+.tag-lic{ background:#e7f1f8; color:var(--lic); }
+.tag-maint{ background:#e8f3ec; color:var(--maint); }
+.pill{ font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:700; padding:3px 9px; border-radius:20px; }
+.status-sel{ width:100%; padding:6px 8px; border:1.5px solid; border-radius:7px; font-family:inherit; font-size:12px; font-weight:600; background:var(--card); cursor:pointer; }
+.empty{ padding:34px; text-align:center; color:#8b8472; font-size:14px; }
+
+.foot{ margin-top:22px; font-size:12px; color:#8b8472; line-height:1.6; }
+.foot strong{ color:#5d6657; }
+
+.overlay{ position:fixed; inset:0; background:rgba(10,20,38,.42); z-index:50; display:none; }
+.overlay.show{ display:flex; }
+.overlay.right{ justify-content:flex-end; }
+.overlay.center{ align-items:center; justify-content:center; padding:24px; }
+.drawer{ width:min(520px,94vw); height:100%; background:var(--paper); overflow-y:auto; padding:30px 28px 44px; position:relative; box-shadow:-20px 0 50px -30px rgba(0,0,0,.5); animation:slide .22s cubic-bezier(.2,.8,.2,1); }
+@keyframes slide{ from{transform:translateX(40px); opacity:.4} to{transform:translateX(0); opacity:1} }
+.x{ position:absolute; top:16px; right:18px; border:none; background:transparent; font-size:26px; line-height:1; cursor:pointer; color:#8b8472; }
+.x:hover{ color:var(--navy); }
+.dr-top h3{ font-family:'Fraunces',serif; font-size:28px; font-weight:600; margin:10px 0 2px; color:var(--navy); }
+.dr-full{ font-size:12px; color:#8b8472; margin:0; }
+.dr-desc{ font-size:14px; color:var(--ink); margin:10px 0 0; line-height:1.5; }
+.dr-grid{ display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:20px; }
+.field{ background:var(--card); padding:11px 13px; }
+.f-k{ font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#8b8472; font-weight:600; }
+.f-v{ font-size:14px; font-weight:500; margin-top:3px; color:var(--ink); word-break:break-word; }
+.dr-block{ margin-top:24px; }
+.dr-block h4{ font-family:'Fraunces',serif; font-size:16px; font-weight:600; color:var(--navy); margin:0 0 10px; }
+.lines{ list-style:none; padding:0; margin:0; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+.lines li{ display:flex; justify-content:space-between; padding:9px 13px; font-size:13px; background:var(--card); border-top:1px solid var(--line); }
+.lines li:first-child{ border-top:none; }
+.stepper{ display:flex; flex-wrap:wrap; gap:6px; }
+.step{ font-size:11px; padding:5px 10px; border-radius:20px; background:#ece6da; color:#9a9281; font-weight:600; }
+.step.done{ background:#dfeee5; color:#2f7d4f; }
+.step.cur{ background:var(--navy); color:#fff; }
+.procs{ margin:0; padding-left:18px; }
+.procs li{ font-size:13px; line-height:1.55; color:var(--ink); margin-bottom:7px; }
+.dr-note{ font-size:13px; color:#6b5736; background:#fdf5e3; border:1px solid #ecd9a8; border-radius:9px; padding:11px 13px; margin-top:10px; line-height:1.5; }
+.contacts{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:9px; }
+.contacts li{ background:var(--card); border:1px solid var(--line); border-radius:9px; padding:11px 13px; }
+.contacts li > div{ display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+.c-name{ font-weight:600; font-size:14px; color:var(--navy); }
+.c-role{ font-size:11px; color:#8b8472; text-align:right; }
+.c-mail{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--lic); text-decoration:none; display:inline-block; margin-top:4px; }
+.c-mail:hover{ text-decoration:underline; }
+.c-mail.muted{ color:#a89f8c; }
+.portal{ display:inline-block; margin-top:18px; font-size:13px; font-weight:600; color:var(--lic); text-decoration:none; }
+.portal:hover{ text-decoration:underline; }
+
+.email{ width:min(620px,94vw); max-height:90vh; overflow-y:auto; background:var(--paper); border-radius:14px; padding:28px 26px 24px; position:relative; box-shadow:0 30px 70px -30px rgba(0,0,0,.6); animation:pop .18s ease; }
+@keyframes pop{ from{transform:scale(.97); opacity:.5} to{transform:scale(1); opacity:1} }
+.email h3{ font-family:'Fraunces',serif; font-size:22px; font-weight:600; color:var(--navy); margin:0 0 16px; }
+.em-row{ display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.em-row > span{ width:34px; font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:#8b8472; font-weight:600; }
+.em-to{ font-size:13px; color:var(--ink); }
+.em-lab{ display:block; font-size:10px; letter-spacing:.09em; text-transform:uppercase; color:#8b8472; font-weight:600; margin:14px 0 5px; }
+.em-input,.em-body{ width:100%; border:1px solid var(--line); border-radius:9px; padding:11px 13px; font-family:inherit; font-size:13px; background:var(--card); color:var(--ink); }
+.em-body{ font-family:'IBM Plex Mono',monospace; line-height:1.5; resize:vertical; }
+.em-input:focus,.em-body:focus{ outline:none; border-color:var(--navy); }
+.em-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
+
+@media (max-width:880px){
+  .stats{ grid-template-columns:1fr 1fr; }
+  .radar-track{ grid-template-columns:1fr 1fr; }
+  .hdr h1{ font-size:34px; }
+  .tr.th{ display:none; }
+  .row{ grid-template-columns:1.6fr 1fr 1.1fr; }
+  .row > div:nth-child(2), .row > div:nth-child(3), .row > div:nth-child(5), .row > div:nth-child(7){ display:none; }
+}
+.edit-btn{ position:absolute; top:16px; right:52px; }
+.ef-sec{ margin-top:20px; }
+.ef-sec h4{ font-family:'Fraunces',serif; font-size:15px; color:var(--navy); margin:0 0 9px; }
+.ef-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.ef-field{ display:flex; flex-direction:column; gap:4px; }
+.ef-field.full{ grid-column:1 / -1; }
+.ef-field label{ font-size:10px; letter-spacing:.07em; text-transform:uppercase; color:#8b8472; font-weight:600; }
+.ef-input,.ef-area,.ef-select{ border:1px solid var(--line); border-radius:8px; padding:9px 11px; font-family:inherit; font-size:13px; background:var(--card); color:var(--ink); width:100%; }
+.ef-area{ resize:vertical; line-height:1.45; font-family:inherit; }
+.ef-input:focus,.ef-area:focus,.ef-select:focus{ outline:none; border-color:var(--navy); }
+.ef-row{ display:grid; gap:8px; align-items:center; margin-bottom:8px; }
+.ef-row.line{ grid-template-columns:1fr 110px 34px; }
+.ef-row.contact{ grid-template-columns:1fr 1.1fr 0.9fr 34px; }
+.ef-del{ border:1px solid var(--line); background:var(--card); color:#b3392f; border-radius:8px; height:36px; cursor:pointer; font-size:17px; line-height:1; }
+.ef-del:hover{ border-color:#b3392f; }
+.ef-add{ font-size:12px; font-weight:600; color:var(--lic); background:transparent; border:1px dashed var(--line); border-radius:8px; padding:9px 12px; cursor:pointer; }
+.ef-add:hover{ border-color:var(--lic); }
+.ef-mini{ display:flex; gap:8px; margin-top:8px; }
+.ef-actions{ display:flex; gap:10px; margin-top:24px; align-items:center; }
+.ef-actions .danger{ color:#b3392f; border-color:#f0c9c4; margin-right:auto; }
+.ef-actions .danger:hover{ border-color:#b3392f; }
+.delta{ font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600; margin-top:1px; }
+.docs{ list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:8px; }
+.doc{ display:flex; align-items:center; gap:10px; background:var(--card); border:1px solid var(--line); border-radius:9px; padding:9px 11px; }
+.doc-badge{ flex:none; font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:700; padding:4px 6px; border-radius:5px; min-width:40px; text-align:center; }
+.doc-badge.df{ background:#e7f1f8; color:var(--lic); }
+.doc-badge.dl{ background:#efe2f5; color:#6b3f8c; }
+.doc-main{ flex:1; min-width:0; display:flex; flex-direction:column; }
+.doc-name{ font-size:13px; font-weight:500; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.doc-meta{ font-size:11px; color:#8b8472; }
+.doc-del{ width:30px; height:30px; }
+.doc-empty{ font-size:12px; color:#8b8472; margin:0 0 10px; }
+.att-link-form{ display:none; gap:8px; margin-top:8px; }
+.att-link-form.show{ display:grid; grid-template-columns:1fr 1.4fr auto; }
+@media (max-width:520px){ .att-link-form.show{ grid-template-columns:1fr; } }
+.amt-prior{ color:#9a9281; }
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-grain"></div>
+  <div class="hdr-inner">
+    <div class="hdr-rule">UCard · Access &amp; Parking Services — Integrated Security</div>
+    <h1>License &amp; Maintenance<br /><em>Renewal Tracker</em></h1>
+    <div class="hdr-meta">
+      <span>Fiscal Year 2026</span><span class="dot">•</span><span id="today"></span>
+      <span class="savechip" id="savechip">Saved</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="stats" id="stats"></section>
+  <section>
+    <div class="sec-head"><h2>Renewal radar</h2><span>soonest term-end first</span></div>
+    <div class="radar-track" id="radar"></div>
+  </section>
+
+  <section class="controls">
+    <input class="search" id="search" placeholder="Search vendor, PO, contact…" />
+    <div class="ctrl">
+      <label>Category</label>
+      <div class="seg" id="seg-cat">
+        <button data-cat="All" class="on">All</button>
+        <button data-cat="Licensing">Licensing</button>
+        <button data-cat="Maintenance">Maintenance</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label>Status</label>
+      <select id="sel-status"></select>
+    </div>
+    <div class="ctrl">
+      <label>Sort</label>
+      <select id="sel-sort">
+        <option value="expiry">Term end</option>
+        <option value="amount">Amount</option>
+        <option value="vendor">Vendor</option>
+      </select>
+    </div>
+    <div class="ctrl-actions">
+      <button class="btn solid" data-action="add">+ Add agreement</button>
+      <button class="btn ghost" data-action="export">Export CSV</button>
+      <button class="btn ghost" data-action="newcycle" title="Reset all statuses for a new renewal cycle — keeps terms, amounts and contacts">New cycle</button>
+      <button class="btn ghost" data-action="restore" title="Restore the original FY26 data — discards your edits">Restore FY26</button>
+    </div>
+  </section>
+
+  <section class="tbl" id="tbl">
+    <div class="tr th">
+      <div>Vendor &amp; agreement</div><div>Cat.</div><div class="ar">Prior yr</div>
+      <div class="ar">Current yr</div><div class="ac">Term ends</div><div>Status</div><div></div>
+    </div>
+    <div id="tbody"></div>
+  </section>
+
+  <footer class="foot">
+    Internal routing — <strong>Valerie Lewis</strong> (Valerie_Lewis@uml.edu) opens POs in BuyWays ·
+    <strong> Jon Victorine</strong> (Jon_Victorine@uml.edu), AVC · <strong>Evan Fallon</strong> (Evan_Fallon@uml.edu), Assoc. Director.
+  </footer>
+</main>
+
+<div class="overlay right" id="drawer-ov"><aside class="drawer" id="drawer"></aside></div>
+<div class="overlay center" id="email-ov"><div class="email" id="email"></div></div>
+<div class="overlay center" id="att-ov"><div class="email" id="att-modal"></div></div>
+<input type="file" id="att-file-input" style="display:none" />
+
+<script>
+"use strict";
+
+var STORAGE_KEY = "ucaps-license-tracker-html-v3";
+var STAGES = ["Not Started","Quote Requested","Quote Received","PO Submitted","Signed / Ordered","Paid"];
+var STAGE_COLOR = { "Not Started":"#8a8170","Quote Requested":"#b7791f","Quote Received":"#b7791f",
+  "PO Submitted":"#2c6e9b","Signed / Ordered":"#2c6e9b","Paid":"#2f7d4f" };
+var TODAY = new Date(2026,5,8);
+
+var SEED = [
+  { id:"amano", vendor:"Amano McGann", vendorFull:"Amano McGann, Inc.",
+    description:"Parking gates — NowCare service contract", category:"Maintenance",
+    amount:18943, termStart:"2025-07-01", termEnd:"2026-06-30", status:"Not Started", paidOn:"2026-05-12",
+    procurement:{ po:"L001895751", invoice:"INVC023689", customer:"0150033", vehicle:"", payPortal:"https://www.billerpayments.com/app/simplepayui/?bsn=amanomcgann" },
+    lineItems:[{label:"NowCare / Service Contract",amt:18943}],
+    contacts:[{name:"Ted Conroy",email:"ted.conroy@amanomcgann.com",role:"Sales/Tech (primary)"},
+      {name:"John Busby",email:"john.busby@amanomcgann.com",role:"Sales"},
+      {name:"Kathy Leggett",email:"kathy.leggett@amanomcgann.com",role:"Admin Svcs Mgr–Boston · 508-509-0152"}],
+    process:["Open the PO BEFORE signing anything — the President's Office rejects pre-signed contracts.",
+      "Submit the UNSIGNED contract to BuyWays first (Kelsey McCauley / Kimberly Mailloux review) so it can be executed.",
+      "Once the contract is executed in BuyWays and the PO exists, sign and pay the invoice.",
+      "Note: Amano raised service & IT/software labor rates effective 1/1/2025 — expect an increase."],
+    notes:"This one caused a snag last cycle: invoice arrived already signed, which UPST/President's Office wouldn't process. Had to reverse the signed agreement. Drive the PO first next time." },
+  { id:"voltrek-cp", vendor:"Voltrek (ChargePoint)", vendorFull:"Voltrek, LLC — an Orion Energy Systems Co.",
+    description:"ChargePoint Cloud Plan — network/station licensing (40 ports)", category:"Licensing",
+    amount:14600, termStart:"2026-04-16", termEnd:"2027-04-16", status:"Not Started", paidOn:"2026-04-16",
+    procurement:{ po:"L001879558", invoice:"INV-6876 (Job 2386)", customer:"", vehicle:"MA OSD Vendor #00008177", payPortal:"" },
+    lineItems:[{label:"CPCLD-COMMERCIAL-REN — 40 ports × $365",amt:14600}],
+    contacts:[{name:"Ellen Ruddy",email:"eruddy@voltrek.com",role:"Account mgr (primary)"},
+      {name:"Will Rigsby",email:"wrigsby@voltrek.com",role:"Backup / coverage"},
+      {name:"Paul Lescovitz",email:"paul@voltrek.com",role:"Voltrek"}],
+    process:["ChargePoint Cloud Plan + Assure are billed together on one invoice (INV-6876, $26,600 combined).",
+      "Renewal flows to ChargePoint; allow a few days for it to appear in the CP portal.",
+      "Location of record: 40 Perkins Street, Lowell."],
+    notes:"Confirm both the Cloud Plan and the Assure warranty renew together to keep one PO." },
+  { id:"voltrek-assure", vendor:"Voltrek (Assure)", vendorFull:"Voltrek, LLC — an Orion Energy Systems Co.",
+    description:"ChargePoint Assure parts & labor warranty (20 CT4000 stations)", category:"Maintenance",
+    amount:12000, termStart:"2026-04-16", termEnd:"2027-04-16", status:"Not Started", paidOn:"2026-04-16",
+    procurement:{ po:"L001879558", invoice:"INV-6876 (Job 2386)", customer:"", vehicle:"MA OSD Vendor #00008177", payPortal:"" },
+    lineItems:[{label:"CT4000-ASSURE-REN — 20 stations × $600",amt:12000}],
+    contacts:[{name:"Ellen Ruddy",email:"eruddy@voltrek.com",role:"Account mgr (primary)"},
+      {name:"Will Rigsby",email:"wrigsby@voltrek.com",role:"Backup / coverage"}],
+    process:["Bundled with the ChargePoint Cloud Plan on invoice INV-6876 (combined $26,600).",
+      "Includes parts and labor warranty, priced per station."],
+    notes:"Same PO and contact as the ChargePoint Cloud Plan line." },
+  { id:"higgins", vendor:"Higgins", vendorFull:"Higgins Office Products",
+    description:"Datacard Sigma DS3 card printers — on-site maintenance (3 printers)", category:"Maintenance",
+    amount:3705, termStart:"2025-08-01", termEnd:"2026-07-31", status:"Not Started", paidOn:"2025-09-18",
+    procurement:{ po:"L001770201", invoice:"IN159226", customer:"UL00", vehicle:"Contract AGR06192-03", payPortal:"" },
+    lineItems:[{label:"3 × Sigma DS3 on-site agreement @ $1,235",amt:3705}],
+    contacts:[{name:"Kevin Michel",email:"kmichel@higgins3.com",role:"Sales (primary)"},
+      {name:"David Higgins",email:"diii@higgins3.com",role:"Higgins"}],
+    process:["Kevin sends a contract proposal, then converts it to an invoice on your approval.",
+      "Give him the PO number (or a name) to reference on the invoice.",
+      "Covers travel, labor, parts — excludes printheads."],
+    notes:"Straightforward. Net 30. Request the final invoice once the PO is open." },
+  { id:"vaidio", vendor:"Vaidio (IronYun)", vendorFull:"IronYun Inc. / Vaidio",
+    description:"Vaidio AI — annual hardware warranty & maintenance", category:"Licensing",
+    amount:709.4, termStart:"2025-07-11", termEnd:"2026-07-11", status:"Not Started", paidOn:"2025-07-15",
+    procurement:{ po:"L001771927", invoice:"#002643 (SO US2407097-1)", customer:"", vehicle:"", payPortal:"" },
+    lineItems:[{label:"Vaidio Upfront Option",amt:0},{label:"Annual HW Warranty & Maintenance",amt:709.4}],
+    contacts:[{name:"Catherine Chen",email:"catherine.chen@vaidio.ai",role:"Sales Administrator (primary)"},
+      {name:"Sonal Mittal",email:"sonal.mittal@vaidio.ai",role:"Vaidio"},
+      {name:"Paul Sun",email:"paulsun@vaidio.ai",role:"Vaidio"}],
+    process:["Email domain moved from ironyun.com to vaidio.ai — use the vaidio.ai addresses.",
+      "Email Catherine at the start of the FY for the year's warranty invoice."],
+    notes:"Smallest line on the list. Catherine issues the invoice on request." },
+  { id:"its", vendor:"ITS (Digital Iris)", vendorFull:"Integrated Technical Systems, Inc.",
+    description:"Digital Iris — T2/Luke on-street meters (3 meters × $60/mo)", category:"Licensing",
+    amount:2160, termStart:"2025-07-01", termEnd:"2026-06-30", status:"Not Started", paidOn:"2025-08-28",
+    procurement:{ po:"L001792878", invoice:"IN64272", customer:"ND0074", vehicle:"Contract CT10156-01", payPortal:"" },
+    lineItems:[{label:"3 meters × $60/mo × 12",amt:2160}],
+    contacts:[{name:"Shawn France",email:"sfrance@integrated-tec.com",role:"ITS (primary) · 203-265-8100"}],
+    process:["Shawn sends the updated quote; accept/sign through the ITS website, then open the PO.",
+      "Due on receipt once invoiced.",
+      "Separate item to watch: the on-street meter cash-removal quote (that project's last quote expired 5/31)."],
+    notes:"Ask Shawn for the refreshed quote, sign off, open the PO." },
+  { id:"minuteman", vendor:"Minuteman (Lenel)", vendorFull:"Minuteman Security Technologies, Inc.",
+    description:"Lenel OnGuard SUSP — access control software support", category:"Licensing",
+    amount:28423.2, termStart:"2026-04-23", termEnd:"2027-04-23", status:"Not Started", paidOn:"2026-03-12",
+    procurement:{ po:"L001861805", invoice:"183925", customer:"", vehicle:"MHEC 14-E05 · Quote #CB054975 · Opp 54918", payPortal:"" },
+    lineItems:[{label:"PRO SUSP Plan, Tier 5 (2049+ readers)",amt:19960},
+      {label:"OnGuard User Direct Technical Support",amt:4043.2},
+      {label:"MW Keywatcher Touch — 1yr lic, 1st 100 keys",amt:740},
+      {label:"CS-SUSP contract renewal (Customs Solutions)",amt:3680}],
+    contacts:[{name:"Chris Burns",email:"cburns@minutemanst.com",role:"Sales (primary)"},
+      {name:"John Mendonca",email:"johnm@minutemanst.com",role:"License keys"},
+      {name:"Jeremy Guillemette",email:"jguillemette@minutemanst.com",role:"License keys"},
+      {name:"Schyler Gagnon",email:"sgagnon@minutemanst.com",role:"Minuteman"}],
+    process:["Reference the MHEC 14-E05 contract vehicle and Quote #CB054975 (Opportunity 54918).",
+      "Largest single line — biggest budget impact. Confirm reader tier (2049+) before approving.",
+      "License key is ordered by John/Jeremy after the PO is received."],
+    notes:"Highest-value agreement. Pin down the tier and the four bundled lines early." },
+  { id:"pharos", vendor:"Pharos", vendorFull:"Pharos Systems International, Inc.",
+    description:"Pharos Uniprint / MobilePrint — print management licensing", category:"Licensing",
+    amount:12540, termStart:"2025-07-31", termEnd:"2026-07-30", status:"Not Started", paidOn:"2025-07-17",
+    procurement:{ po:"L001770919", invoice:"#I20250600", customer:"Site Code UMASSL02", vehicle:"", payPortal:"" },
+    lineItems:[{label:"UPF-START — 15 device/mobile/release licenses",amt:5868},
+      {label:"40 × UPF10-4P-A",amt:4320},{label:"UP-CCGW-A (install)",amt:1848},
+      {label:"2 × UPF10-RELSTA-A",amt:504}],
+    contacts:[{name:"Pharos Renewals",email:"renewals@pharos.com",role:"Renewals (primary)"},
+      {name:"Pharos Orders",email:"orders@pharos.com",role:"Orders"},
+      {name:"AJ HerrNeckar",email:"",role:"Sales Rep (on invoice)"}],
+    process:["As a Direct Customer, Pharos only accepts the signature in the DealRoom webpage — sign electronically there.",
+      "Attach the PO in the DealBox section of the DealRoom page.",
+      "Site Code: UMASSL02. Can download a PDF Sales Order from the DealRoom menu if needed."],
+    notes:"Renewal notice comes from orders@pharos.com with a DealRoom link. iMFP licenses can be added later as needed." },
+  { id:"cardinal", vendor:"Cardinal (TickeTrak)", vendorFull:"End2End Public Safety / Cardinal Tracking, Inc.",
+    description:"Cardinal TickeTrak — citation mgmt (12 lic), DHQ Cloud, TTM-Android (6 lic)", category:"Licensing",
+    amount:9938.9, termStart:"2026-07-01", termEnd:"2027-06-30", status:"Not Started", paidOn:"2026-04-23",
+    procurement:{ po:"L001889700", invoice:"#265722", customer:"", vehicle:"", payPortal:"" },
+    lineItems:[{label:"TickeTrak (12) + DHQ Cloud + TTM-Android (6)",amt:9938.9}],
+    contacts:[{name:"Elaine Morris",email:"elaine.morris@arms.com",role:"Regional Sales Mgr · 434-826-0411"}],
+    process:["Send Elaine the original accounting quote; she issues the new renewal quote.",
+      "Payment is Net 45 from the contract start date.",
+      "Already covered through 6/30/2027 — renew again for FY28."],
+    notes:"Support/maintenance expired 6/30/2026; the new term (paid early) runs 7/1/2026–6/30/2027." }
+];
+
+/* ---- state ---- */
+var items = SEED.map(function(s){ return JSON.parse(JSON.stringify(s)); });
+var ui = { query:"", cat:"All", stat:"All", sortBy:"expiry" };
+var editing = null;      // {id, isNew} while in edit mode
+var draft = null;        // working copy while editing
+var currentView = null;  // id of agreement shown in the drawer (view mode)
+
+/* ---- helpers ---- */
+function esc(s){ return String(s==null?"":s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function money(n){ n=Number(n)||0; return n.toLocaleString("en-US",{style:"currency",currency:"USD",minimumFractionDigits:(n%1)?2:0}); }
+function isDate(s){ return typeof s==="string" && /^\d{4}-\d{2}-\d{2}$/.test(s); }
+function parseDate(s){ var p=s.split("-").map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function fmtDate(s){ return isDate(s)?parseDate(s).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"—"; }
+function daysUntil(s){ return isDate(s)?Math.round((parseDate(s)-TODAY)/86400000):null; }
+function termVal(s){ return isDate(s)?parseDate(s).getTime():Infinity; }
+function urgency(d){
+  if(d===null) return {color:"#5d6b5f",bg:"#eaf0ea"};
+  if(d<0) return {color:"#b3392f",bg:"#fbe9e7"};
+  if(d<=45) return {color:"#9a5b00",bg:"#fdf2dc"};
+  if(d<=120) return {color:"#1f5d86",bg:"#e7f1f8"};
+  return {color:"#5d6b5f",bg:"#eaf0ea"};
+}
+function byId(id){ for(var k=0;k<items.length;k++){ if(items[k].id===id) return items[k]; } return null; }
+function idxOf(id){ for(var k=0;k<items.length;k++){ if(items[k].id===id) return k; } return -1; }
+function setPath(o,path,val){ var p=path.split("."); var t=o; for(var i=0;i<p.length-1;i++){ if(!t[p[i]]) t[p[i]]={}; t=t[p[i]]; } t[p[p.length-1]]=val; }
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+function normalize(list){ (list||[]).forEach(function(i){ if(i.priorAmount===undefined||i.priorAmount===null) i.priorAmount=Number(i.amount)||0; if(!i.procurement) i.procurement={}; if(!i.lineItems) i.lineItems=[]; if(!i.contacts) i.contacts=[]; if(!i.process) i.process=[]; if(!i.attachments) i.attachments=[]; }); return list; }
+function variance(prior,cur){ prior=Number(prior)||0; cur=Number(cur)||0; var diff=cur-prior; if(prior===0&&cur===0) return null; if(diff===0) return {text:"No change",color:"#5d6b5f"}; var sign=diff>0?"+":"\u2212"; var pct=prior!==0?" ("+sign+Math.abs(diff/prior*100).toFixed(1)+"%)":""; var color=diff>0?"#b3392f":"#2f7d4f"; return {text:sign+money(Math.abs(diff))+pct, color:color}; }
+function deltaHtml(prior,cur){ prior=Number(prior)||0; cur=Number(cur)||0; var diff=cur-prior; if(prior===0||diff===0) return ""; var pct=diff/prior*100; var sign=diff>0?"+":"\u2212"; var color=diff>0?"#b3392f":"#2f7d4f"; return '<div class="delta" style="color:'+color+'">'+sign+Math.abs(pct).toFixed(0)+'%</div>'; }
+
+/* ---- attachments + storage helpers ---- */
+function genId(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function fmtSize(b){ b=Number(b)||0; if(b<1024) return b+" B"; if(b<1048576) return (b/1024).toFixed(0)+" KB"; return (b/1048576).toFixed(1)+" MB"; }
+function fileExt(name){ var m=/\.([a-z0-9]+)$/i.exec(name||""); return m?m[1].toUpperCase().slice(0,4):"FILE"; }
+function dataURLtoBlob(d){ var parts=d.split(","), mime=(parts[0].match(/:(.*?);/)||[])[1]||"application/octet-stream", bin=atob(parts[1]||""), n=bin.length, u=new Uint8Array(n); while(n--) u[n]=bin.charCodeAt(n); return new Blob([u],{type:mime}); }
+function storageSet(k,v){ if(window.storage&&window.storage.set){ return window.storage.set(k,v).then(function(){return true;},function(){return false;}); } return new Promise(function(res){ try{ localStorage.setItem(k,v); res(true);}catch(e){ res(false);} }); }
+function storageGet(k){ if(window.storage&&window.storage.get){ return window.storage.get(k).then(function(r){return r&&r.value?r.value:null;},function(){return null;}); } return new Promise(function(res){ try{ res(localStorage.getItem(k)); }catch(e){ res(null);} }); }
+function storageDel(k){ if(window.storage&&window.storage.delete){ try{ window.storage.delete(k); }catch(e){} return; } try{ localStorage.removeItem(k); }catch(e){} }
+function clearAttachmentBlobs(){ var prefix=STORAGE_KEY+"-att-"; if(window.storage&&window.storage.list){ try{ window.storage.list(prefix).then(function(r){ ((r&&r.keys)||[]).forEach(function(k){ if(k.indexOf(prefix)===0&&window.storage.delete) window.storage.delete(k); }); }); }catch(e){} } else { try{ Object.keys(localStorage).forEach(function(k){ if(k.indexOf(prefix)===0) localStorage.removeItem(k); }); }catch(e){} } }
+function findAtt(attId){ var f=null; items.forEach(function(i){ (i.attachments||[]).forEach(function(a){ if(a.id===attId) f=a; }); }); return f; }
+var MAX_FILE=3145728; // 3 MB
+var currentAttachTarget=null;
+
+function handleFileChosen(file){
+  var i=byId(currentAttachTarget); if(!i||!file) return;
+  if(file.size>MAX_FILE){ alert("\""+file.name+"\" is "+fmtSize(file.size)+". The app stores files up to "+fmtSize(MAX_FILE)+" reliably \u2014 for anything larger, use \"Add link\" to point at SharePoint or a shared drive."); return; }
+  var reader=new FileReader();
+  reader.onload=function(){
+    var attId=genId(), key=STORAGE_KEY+"-att-"+attId;
+    storageSet(key, reader.result).then(function(okk){
+      if(!okk){ alert("Couldn't save \""+file.name+"\" \u2014 the app's storage may be full. Try a smaller file, or add it as a link."); return; }
+      if(!i.attachments) i.attachments=[];
+      i.attachments.push({id:attId,kind:"file",name:file.name,mime:file.type||"application/octet-stream",size:file.size,key:key});
+      save(); renderDrawerView(i);
+    });
+  };
+  reader.readAsDataURL(file);
+}
+function addLink(id){
+  var i=byId(id); if(!i) return;
+  var dr=document.getElementById("drawer");
+  var url=((dr.querySelector('[data-key="lk-url"]')||{}).value||"").trim();
+  var name=((dr.querySelector('[data-key="lk-name"]')||{}).value||"").trim();
+  if(!url){ alert("Enter a link URL."); return; }
+  if(!/^https?:\/\//i.test(url)) url="https://"+url;
+  if(!i.attachments) i.attachments=[];
+  i.attachments.push({id:genId(),kind:"link",name:name||url,url:url});
+  save(); renderDrawerView(i);
+}
+function removeAttachment(id,attId){
+  var i=byId(id); if(!i) return;
+  var att=(i.attachments||[]).filter(function(a){return a.id===attId;})[0];
+  if(att && att.kind==="file" && att.key) storageDel(att.key);
+  i.attachments=(i.attachments||[]).filter(function(a){return a.id!==attId;});
+  save(); renderDrawerView(i);
+}
+function openAttachment(attId){
+  var att=findAtt(attId); if(!att) return;
+  if(att.kind==="link"){ window.open(att.url,"_blank","noopener"); return; }
+  storageGet(att.key).then(function(d){
+    if(!d){ alert("This file isn't available in storage."); return; }
+    var inner;
+    if(/^image\//.test(att.mime)) inner='<img src="'+d+'" style="max-width:100%;border-radius:8px" />';
+    else if(att.mime==="application/pdf") inner='<embed src="'+d+'" type="application/pdf" style="width:100%;height:68vh;border:none;border-radius:8px" />';
+    else inner='<p class="doc-empty">No inline preview for this file type \u2014 use Download.</p>';
+    document.getElementById("att-modal").innerHTML='<button class="x" data-action="att-close">\u00d7</button><h3>'+esc(att.name)+'</h3>'+inner+'<div class="em-actions"><button class="btn solid" data-action="att-download" data-att="'+att.id+'">Download</button></div>';
+    document.getElementById("att-ov").classList.add("show");
+  });
+}
+function downloadAttachment(attId){
+  var att=findAtt(attId); if(!att||att.kind!=="file") return;
+  storageGet(att.key).then(function(d){
+    if(!d) return;
+    var url=URL.createObjectURL(dataURLtoBlob(d));
+    var a=document.createElement("a"); a.href=url; a.download=att.name; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+  });
+}
+function closeAtt(){ document.getElementById("att-ov").classList.remove("show"); }
+
+/* ---- persistence (full records; localStorage with safe fallback) ---- */
+function save(){
+  var data=JSON.stringify(items);
+  if(window.storage && window.storage.set){
+    try{ window.storage.set(STORAGE_KEY, data).then(function(){ flash("Saved"); }, function(){ flash("Session only"); }); }
+    catch(e){ flash("Session only"); }
+  } else {
+    try{ localStorage.setItem(STORAGE_KEY, data); flash("Saved"); }catch(e){ flash("Session only"); }
+  }
+}
+function load(){
+  return (async function(){
+    if(window.storage && window.storage.get){
+      try{ var r=await window.storage.get(STORAGE_KEY); if(r && r.value){ var s=JSON.parse(r.value); if(Array.isArray(s)&&s.length) items=normalize(s); } }catch(e){}
+      return;
+    }
+    try{ var raw=localStorage.getItem(STORAGE_KEY); if(raw){ var st=JSON.parse(raw); if(Array.isArray(st)&&st.length) items=normalize(st); } }catch(e){}
+  })();
+}
+var flashT;
+function flash(msg){
+  var el=document.getElementById("savechip");
+  el.textContent=msg; el.classList.add("show");
+  clearTimeout(flashT); flashT=setTimeout(function(){ el.classList.remove("show"); },1400);
+}
+
+/* ---- dashboard renders ---- */
+function renderStats(){
+  var total=items.reduce(function(a,b){return a+(Number(b.amount)||0);},0);
+  var priorTotal=items.reduce(function(a,b){return a+(Number(b.priorAmount)||0);},0);
+  var lic=items.filter(function(i){return i.category==="Licensing";}).reduce(function(a,b){return a+(Number(b.amount)||0);},0);
+  var maint=total-lic;
+  var dueSoon=items.filter(function(i){var d=daysUntil(i.termEnd);return d!==null&&d>=0&&d<=60;}).length;
+  var licN=items.filter(function(i){return i.category==="Licensing";}).length;
+  var pct=priorTotal?((total-priorTotal)/priorTotal*100):0;
+  var psign=pct>0?"+":(pct<0?"\u2212":"");
+  var pcolor=pct>0?"#b3392f":(pct<0?"#2f7d4f":"#8b8472");
+  var sub1='vs '+money(priorTotal)+' prior <span style="color:'+pcolor+';font-weight:600">'+psign+Math.abs(pct).toFixed(1)+'%</span>';
+  var cards=[
+    {l:"Current-year commitment",v:money(total),s:sub1,a:"#0a2240"},
+    {l:"Required licensing",v:money(lic),s:licN+" items",a:"#1f5d86"},
+    {l:"Maintenance agreements",v:money(maint),s:(items.length-licN)+" items",a:"#2f7d4f"},
+    {l:"Expiring \u2264 60 days",v:dueSoon,s:"needs attention",a:"#9a5b00"}
+  ];
+  document.getElementById("stats").innerHTML = cards.map(function(c){
+    return '<div class="statcard"><div class="st-bar" style="background:'+c.a+'"></div>'+
+      '<div class="st-label">'+c.l+'</div><div class="st-value" style="color:'+c.a+'">'+c.v+'</div>'+
+      '<div class="st-sub">'+c.s+'</div></div>';
+  }).join("");
+}
+
+function renderRadar(){
+  var r=items.slice().sort(function(a,b){return termVal(a.termEnd)-termVal(b.termEnd);}).slice(0,6);
+  document.getElementById("radar").innerHTML = r.map(function(i){
+    var d=daysUntil(i.termEnd), u=urgency(d);
+    var lab=(d===null)?"\u2014":(d<0?"Expired":d+" days");
+    return '<button class="radar-card" style="border-top-color:'+u.color+'" data-action="open" data-id="'+i.id+'">'+
+      '<span class="rc-days" style="color:'+u.color+';background:'+u.bg+'">'+lab+'</span>'+
+      '<span class="rc-vendor">'+esc(i.vendor||"(untitled)")+'</span>'+
+      '<span class="rc-date">term ends '+fmtDate(i.termEnd)+'</span>'+
+      '<span class="rc-amt">'+money(i.amount)+'</span></button>';
+  }).join("");
+}
+
+function renderTable(){
+  var q=ui.query.toLowerCase();
+  var r=items.filter(function(i){
+    var hit=!q||(i.vendor||"").toLowerCase().indexOf(q)>-1||(i.description||"").toLowerCase().indexOf(q)>-1||
+      ((i.procurement&&i.procurement.po)||"").toLowerCase().indexOf(q)>-1||
+      (i.contacts||[]).some(function(c){return (c.name||"").toLowerCase().indexOf(q)>-1;});
+    return hit&&(ui.cat==="All"||i.category===ui.cat)&&(ui.stat==="All"||i.status===ui.stat);
+  });
+  r.sort(function(a,b){
+    if(ui.sortBy==="expiry") return termVal(a.termEnd)-termVal(b.termEnd);
+    if(ui.sortBy==="amount") return (Number(b.amount)||0)-(Number(a.amount)||0);
+    if(ui.sortBy==="vendor") return (a.vendor||"").localeCompare(b.vendor||"");
+    return 0;
+  });
+  var body=document.getElementById("tbody");
+  if(!r.length){ body.innerHTML='<div class="empty">No agreements match those filters.</div>'; return; }
+  body.innerHTML = r.map(function(i){
+    var d=daysUntil(i.termEnd), u=urgency(d);
+    var lab=(d===null)?"\u2014":(d<0?"Expired":d+"d");
+    var opts=STAGES.map(function(s){return '<option value="'+s+'"'+(s===i.status?" selected":"")+'>'+s+'</option>';}).join("");
+    return '<div class="tr row">'+
+      '<div class="cell-vendor" data-action="open" data-id="'+i.id+'"><span class="v-name">'+esc(i.vendor||"(untitled)")+'</span><span class="v-desc">'+esc(i.description)+'</span></div>'+
+      '<div><span class="tag '+(i.category==="Licensing"?"tag-lic":"tag-maint")+'">'+(i.category==="Licensing"?"License":"Maint.")+'</span></div>'+
+      '<div class="ar mono small amt-prior">'+money(i.priorAmount)+'</div>'+
+      '<div class="ar"><div class="mono">'+money(i.amount)+'</div>'+deltaHtml(i.priorAmount,i.amount)+'</div>'+
+      '<div class="ac"><span class="pill" style="color:'+u.color+';background:'+u.bg+'">'+lab+'</span></div>'+
+      '<div><select class="status-sel" data-role="status" data-id="'+i.id+'" style="color:'+STAGE_COLOR[i.status]+';border-color:'+STAGE_COLOR[i.status]+'">'+opts+'</select></div>'+
+      '<div class="ac"><button class="btn tiny" data-action="open" data-id="'+i.id+'">Details</button></div></div>';
+  }).join("");
+}
+
+function renderAll(){ renderStats(); renderRadar(); renderTable(); }
+
+/* ---- drawer: view mode ---- */
+function showDrawer(){ document.getElementById("drawer-ov").classList.add("show"); }
+function closeDrawer(){ document.getElementById("drawer-ov").classList.remove("show"); editing=null; draft=null; currentView=null; }
+function openDrawer(id){ var i=byId(id); if(!i) return; editing=null; draft=null; renderDrawerView(i); showDrawer(); }
+
+function renderDrawerView(i){
+  currentView=i.id;
+  function fld(k,v,mono){ return '<div class="field"><div class="f-k">'+k+'</div><div class="f-v'+(mono?" mono":"")+'">'+esc(v)+'</div></div>'; }
+  var p=i.procurement||{};
+  var grid="";
+  grid+=fld("Current year",money(i.amount),true);
+  grid+=fld("Prior year",money(i.priorAmount),true);
+  var v=variance(i.priorAmount,i.amount);
+  grid+='<div class="field"><div class="f-k">Change vs prior</div><div class="f-v mono" style="color:'+(v?v.color:"#5d6b5f")+'">'+(v?v.text:"\u2014")+'</div></div>';
+  grid+=fld("Status",i.status,false);
+  grid+=fld("Current term",fmtDate(i.termStart)+" \u2192 "+fmtDate(i.termEnd),false);
+  grid+=fld("Paid on",i.paidOn?fmtDate(i.paidOn):"\u2014",false);
+  grid+=fld("PO #",p.po||"\u2014",true);
+  grid+=fld("Invoice",p.invoice||"\u2014",true);
+  if(p.customer) grid+=fld("Account / site",p.customer,true);
+  if(p.vehicle) grid+=fld("Contract vehicle / quote",p.vehicle,true);
+
+  var lines="";
+  if((i.lineItems||[]).length>1){
+    lines='<div class="dr-block"><h4>Line items</h4><ul class="lines">'+
+      i.lineItems.map(function(l){return '<li><span>'+esc(l.label)+'</span><span class="mono">'+money(l.amt)+'</span></li>';}).join("")+'</ul></div>';
+  }
+  var idx=STAGES.indexOf(i.status);
+  var stepper=STAGES.map(function(s){var h=STAGES.indexOf(s);return '<span class="step'+(h<idx?" done":"")+(h===idx?" cur":"")+'">'+s+'</span>';}).join("");
+  var procs=(i.process||[]).map(function(x){return '<li>'+esc(x)+'</li>';}).join("");
+  var contacts=(i.contacts||[]).map(function(c){
+    return '<li><div><span class="c-name">'+esc(c.name)+'</span><span class="c-role">'+esc(c.role)+'</span></div>'+
+      (c.email?'<a class="c-mail" href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'<span class="c-mail muted">no email on file</span>')+'</li>';
+  }).join("");
+  var portal=(p.payPortal)?'<a class="portal" href="'+esc(p.payPortal)+'" target="_blank" rel="noreferrer">Open vendor payment portal \u2197</a>':"";
+
+  var atts=(i.attachments||[]).map(function(a){
+    var meta=a.kind==="file"?fmtSize(a.size):"link";
+    return '<li class="doc"><span class="doc-badge '+(a.kind==="file"?"df":"dl")+'">'+(a.kind==="file"?fileExt(a.name):"LINK")+'</span>'+
+      '<div class="doc-main"><span class="doc-name">'+esc(a.name)+'</span><span class="doc-meta">'+esc(meta)+'</span></div>'+
+      '<button class="btn tiny" data-action="att-open" data-att="'+a.id+'">'+(a.kind==="file"?"View":"Open")+'</button>'+
+      '<button class="ef-del doc-del" data-action="att-remove" data-id="'+i.id+'" data-att="'+a.id+'" title="Remove">\u00d7</button></li>';
+  }).join("");
+  var docsBlock='<div class="dr-block"><h4>Documents</h4>'+
+    ((i.attachments||[]).length?'<ul class="docs">'+atts+'</ul>':'<p class="doc-empty">No quotes or invoices attached yet.</p>')+
+    '<div class="ef-mini"><button class="ef-add" data-action="att-file" data-id="'+i.id+'">+ Attach file</button>'+
+    '<button class="ef-add" data-action="att-link-toggle">+ Add link</button></div>'+
+    '<div class="att-link-form" id="att-link-form"><input class="ef-input" data-key="lk-name" placeholder="Label (optional)" />'+
+    '<input class="ef-input" data-key="lk-url" placeholder="https://\u2026 SharePoint, OneDrive, email link" />'+
+    '<button class="btn solid" data-action="att-link-add" data-id="'+i.id+'">Add</button></div></div>';
+
+  document.getElementById("drawer").innerHTML=
+    '<button class="x" data-action="close-drawer">\u00d7</button>'+
+    '<button class="btn tiny edit-btn" data-action="edit" data-id="'+i.id+'">Edit</button>'+
+    '<div class="dr-top"><span class="tag '+(i.category==="Licensing"?"tag-lic":"tag-maint")+'">'+esc(i.category)+'</span>'+
+    '<h3>'+esc(i.vendor||"(untitled)")+'</h3><p class="dr-full">'+esc(i.vendorFull)+'</p><p class="dr-desc">'+esc(i.description)+'</p></div>'+
+    '<div class="dr-grid">'+grid+'</div>'+lines+
+    '<div class="dr-block"><h4>Renewal workflow</h4><div class="stepper">'+stepper+'</div></div>'+
+    (procs?'<div class="dr-block"><h4>How this renewal works</h4><ol class="procs">'+procs+'</ol>'+(i.notes?'<p class="dr-note">'+esc(i.notes)+'</p>':"")+'</div>':(i.notes?'<div class="dr-block"><p class="dr-note">'+esc(i.notes)+'</p></div>':""))+
+    ((i.contacts||[]).length?'<div class="dr-block"><h4>Vendor contacts</h4><ul class="contacts">'+contacts+'</ul></div>':"")+
+    portal+
+    docsBlock+
+    '<button class="btn solid wide" data-action="email" data-id="'+i.id+'">Draft renewal request email</button>';
+}
+
+/* ---- drawer: edit mode ---- */
+function blankItem(){
+  return { id:"new-"+Date.now(), vendor:"", vendorFull:"", description:"", category:"Licensing",
+    amount:0, priorAmount:0, termStart:"", termEnd:"", status:"Not Started", paidOn:"",
+    procurement:{po:"",invoice:"",customer:"",vehicle:"",payPortal:""},
+    lineItems:[], contacts:[], process:[], notes:"", attachments:[] };
+}
+function enterEdit(id){ var i=byId(id); if(!i) return; draft=clone(i); if(!draft.procurement) draft.procurement={}; editing={id:id,isNew:false}; renderDrawerEdit(); showDrawer(); }
+function addAgreement(){ draft=blankItem(); editing={id:draft.id,isNew:true}; renderDrawerEdit(); showDrawer(); }
+
+function renderDrawerEdit(){
+  var d=draft, p=d.procurement||{};
+  function inp(field,val,type,ph){ return '<input class="ef-input" data-field="'+field+'"'+(type?' type="'+type+'"':'')+(type==="number"?' step="0.01"':'')+' value="'+esc(val)+'"'+(ph?' placeholder="'+esc(ph)+'"':'')+' />'; }
+  function fld(label,field,val,type,ph,full){ return '<div class="ef-field'+(full?" full":"")+'"><label>'+label+'</label>'+inp(field,val,type,ph)+'</div>'; }
+  var catSel='<div class="ef-field"><label>Category</label><select class="ef-select" data-field="category">'+
+    ["Licensing","Maintenance"].map(function(o){return '<option'+(d.category===o?" selected":"")+'>'+o+'</option>';}).join("")+'</select></div>';
+  var statSel='<div class="ef-field"><label>Status</label><select class="ef-select" data-field="status">'+
+    STAGES.map(function(o){return '<option'+(d.status===o?" selected":"")+'>'+o+'</option>';}).join("")+'</select></div>';
+
+  var lineRows=(d.lineItems||[]).map(function(l,n){
+    return '<div class="ef-row line" data-row="line">'+
+      '<input class="ef-input" data-key="label" value="'+esc(l.label)+'" placeholder="Description" />'+
+      '<input class="ef-input" data-key="amt" type="number" step="0.01" value="'+(l.amt!=null?l.amt:0)+'" />'+
+      '<button class="ef-del" data-action="rm-line" data-index="'+n+'" title="Remove">\u00d7</button></div>';
+  }).join("");
+
+  var contactRows=(d.contacts||[]).map(function(c,n){
+    return '<div class="ef-row contact" data-row="contact">'+
+      '<input class="ef-input" data-key="name" value="'+esc(c.name)+'" placeholder="Name" />'+
+      '<input class="ef-input" data-key="email" value="'+esc(c.email)+'" placeholder="email" />'+
+      '<input class="ef-input" data-key="role" value="'+esc(c.role)+'" placeholder="Role / phone" />'+
+      '<button class="ef-del" data-action="rm-contact" data-index="'+n+'" title="Remove">\u00d7</button></div>';
+  }).join("");
+
+  document.getElementById("drawer").innerHTML=
+    '<button class="x" data-action="cancel-edit">\u00d7</button>'+
+    '<div class="dr-top"><span class="tag '+(d.category==="Licensing"?"tag-lic":"tag-maint")+'">'+esc(editing.isNew?"New agreement":"Editing")+'</span>'+
+    '<h3>'+esc(editing.isNew?"New agreement":(d.vendor||"Edit agreement"))+'</h3></div>'+
+
+    '<div class="ef-sec"><div class="ef-grid">'+
+      fld("Vendor (short name)","vendor",d.vendor,"","e.g. Pharos",true)+
+      fld("Vendor (full / legal name)","vendorFull",d.vendorFull,"","",true)+
+      '<div class="ef-field full"><label>Description</label><textarea class="ef-area" data-field="description" rows="2">'+esc(d.description)+'</textarea></div>'+
+      catSel+statSel+
+    '</div></div>'+
+
+    '<div class="ef-sec"><h4>Terms &amp; amounts</h4><div class="ef-grid">'+
+      fld("Prior year ($)","priorAmount",d.priorAmount,"number")+
+      fld("Current year ($)","amount",d.amount,"number")+
+      fld("Term start","termStart",d.termStart,"date")+
+      fld("Term end","termEnd",d.termEnd,"date")+
+      fld("Paid on","paidOn",d.paidOn,"date")+
+      fld("PO #","procurement.po",p.po)+
+      fld("Invoice #","procurement.invoice",p.invoice)+
+      fld("Account / site","procurement.customer",p.customer)+
+      fld("Contract vehicle / quote","procurement.vehicle",p.vehicle,"","",true)+
+      fld("Payment portal URL","procurement.payPortal",p.payPortal,"","",true)+
+    '</div></div>'+
+
+    '<div class="ef-sec"><h4>Line items</h4>'+lineRows+
+      '<div class="ef-mini"><button class="ef-add" data-action="add-line">+ Add line item</button>'+
+      '<button class="ef-add" data-action="sum-amount">Sum \u2192 Amount</button></div></div>'+
+
+    '<div class="ef-sec"><h4>Vendor contacts</h4>'+contactRows+
+      '<div class="ef-mini"><button class="ef-add" data-action="add-contact">+ Add contact</button></div></div>'+
+
+    '<div class="ef-sec"><h4>How this renewal works</h4>'+
+      '<textarea class="ef-area" data-field="process" rows="5" placeholder="One step per line">'+esc((d.process||[]).join("\n"))+'</textarea></div>'+
+
+    '<div class="ef-sec"><h4>Notes</h4>'+
+      '<textarea class="ef-area" data-field="notes" rows="3">'+esc(d.notes)+'</textarea></div>'+
+
+    '<div class="ef-actions">'+
+      (editing.isNew?"":'<button class="btn danger" data-action="del-agreement">Delete</button>')+
+      '<button class="btn ghost" data-action="cancel-edit">Cancel</button>'+
+      '<button class="btn solid" data-action="save-edit">Save</button></div>';
+}
+
+function syncDraftFromForm(){
+  if(!draft) return;
+  var d=document.getElementById("drawer");
+  Array.prototype.forEach.call(d.querySelectorAll("[data-field]"),function(el){
+    var path=el.getAttribute("data-field"), val=el.value;
+    if(el.type==="number") setPath(draft,path,parseFloat(val)||0);
+    else if(path==="process") draft.process=val.split("\n").map(function(s){return s.trim();}).filter(Boolean);
+    else setPath(draft,path,val);
+  });
+  draft.lineItems=Array.prototype.map.call(d.querySelectorAll('[data-row="line"]'),function(r){
+    return { label:r.querySelector('[data-key="label"]').value, amt:parseFloat(r.querySelector('[data-key="amt"]').value)||0 };
+  });
+  draft.contacts=Array.prototype.map.call(d.querySelectorAll('[data-row="contact"]'),function(r){
+    return { name:r.querySelector('[data-key="name"]').value, email:r.querySelector('[data-key="email"]').value, role:r.querySelector('[data-key="role"]').value };
+  });
+}
+function addLineItem(){ syncDraftFromForm(); draft.lineItems.push({label:"",amt:0}); renderDrawerEdit(); }
+function removeLineItem(n){ syncDraftFromForm(); draft.lineItems.splice(n,1); renderDrawerEdit(); }
+function addContact(){ syncDraftFromForm(); draft.contacts.push({name:"",email:"",role:""}); renderDrawerEdit(); }
+function removeContact(n){ syncDraftFromForm(); draft.contacts.splice(n,1); renderDrawerEdit(); }
+function sumToAmount(){ syncDraftFromForm(); draft.amount=draft.lineItems.reduce(function(a,b){return a+(Number(b.amt)||0);},0); renderDrawerEdit(); }
+
+function saveEdit(){
+  syncDraftFromForm();
+  if(!draft.vendor || !draft.vendor.trim()){ alert("Please enter a vendor name before saving."); return; }
+  var keep=draft.id;
+  if(editing.isNew){ items.push(draft); }
+  else { var ix=idxOf(editing.id); if(ix>-1) items[ix]=draft; else items.push(draft); }
+  editing=null; draft=null; save(); renderAll(); openDrawer(keep);
+}
+function cancelEdit(){
+  var wasNew=editing&&editing.isNew, id=editing?editing.id:null;
+  editing=null; draft=null;
+  if(wasNew){ closeDrawer(); } else if(id){ openDrawer(id); } else { closeDrawer(); }
+}
+function deleteAgreement(){
+  if(!editing) return;
+  var i=byId(editing.id);
+  if(confirm("Delete \""+((i&&i.vendor)||"this agreement")+"\"? This cannot be undone.")){
+    (i&&i.attachments||[]).forEach(function(a){ if(a.kind==="file"&&a.key) storageDel(a.key); });
+    var ix=idxOf(editing.id); if(ix>-1) items.splice(ix,1);
+    editing=null; draft=null; save(); renderAll(); closeDrawer();
+  }
+}
+
+/* ---- email ---- */
+function buildEmail(i){
+  var to=((i.contacts||[]).filter(function(c){return c.email;})[0]||{}).email||"";
+  var p=i.procurement||{};
+  var nextStart=isDate(i.termEnd)?parseDate(i.termEnd).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}):"the upcoming term";
+  var subject="UMass Lowell \u2014 "+i.vendor+" renewal quote request ("+i.description+")";
+  var body="Hello,\n\nAs we approach the renewal of our "+i.description+" (current term ending "+fmtDate(i.termEnd)+
+    "), could you please send an updated quote for the upcoming term beginning "+nextStart+"?\n\n"+
+    "For reference, last term we were on PO "+(p.po||"\u2014")+" / invoice "+(p.invoice||"\u2014")+
+    (p.vehicle?" ("+p.vehicle+")":"")+", at "+money(i.priorAmount)+".\n\n"+
+    "Once I have the quote I'll get a PO opened on our end through BuyWays so we can process payment.\n\nThank you,\n\n"+
+    "Paulo Pinheiro, '06,'14\nDirector \u2014 UCAPS & Integrated Security\nUCard, Access & Parking Services\n"+
+    "University of Massachusetts Lowell\nE: Paulo_Pinheiro@uml.edu  T: 978-934-4748";
+  return {to:to,subject:subject,body:body};
+}
+function openEmail(id){
+  var i=byId(id); if(!i) return; var e=buildEmail(i);
+  document.getElementById("email").innerHTML=
+    '<button class="x" data-action="close-email">\u00d7</button>'+
+    '<h3>Renewal request \u2014 '+esc(i.vendor)+'</h3>'+
+    '<div class="em-row"><span>To</span><div class="em-to mono">'+(e.to?esc(e.to):"no email on file")+'</div></div>'+
+    '<label class="em-lab">Subject</label><input class="em-input" id="em-subject" />'+
+    '<label class="em-lab">Message</label><textarea class="em-body" id="em-body" rows="14"></textarea>'+
+    '<div class="em-actions"><button class="btn ghost" data-action="copy">Copy</button>'+
+    '<button class="btn solid" data-action="mailto" data-to="'+esc(e.to)+'">Open in mail</button></div>';
+  document.getElementById("em-subject").value=e.subject;
+  document.getElementById("em-body").value=e.body;
+  document.getElementById("email-ov").classList.add("show");
+}
+function closeEmail(){ document.getElementById("email-ov").classList.remove("show"); }
+function doCopy(){
+  var to=document.querySelector('[data-action="mailto"]').getAttribute("data-to");
+  var subject=document.getElementById("em-subject").value, body=document.getElementById("em-body").value;
+  var text="To: "+to+"\nSubject: "+subject+"\n\n"+body;
+  var btn=document.querySelector('[data-action="copy"]');
+  function done(){ btn.textContent="Copied \u2713"; setTimeout(function(){btn.textContent="Copy";},1500); }
+  if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(done,function(){ legacyCopy(text); done(); }); }
+  else { legacyCopy(text); done(); }
+}
+function legacyCopy(text){
+  var ta=document.createElement("textarea"); ta.value=text; ta.style.position="fixed"; ta.style.opacity="0";
+  document.body.appendChild(ta); ta.select(); try{ document.execCommand("copy"); }catch(e){} document.body.removeChild(ta);
+}
+function doMailto(btn){
+  var to=btn.getAttribute("data-to");
+  var subject=document.getElementById("em-subject").value, body=document.getElementById("em-body").value;
+  window.location.href="mailto:"+to+"?subject="+encodeURIComponent(subject)+"&body="+encodeURIComponent(body);
+}
+
+/* ---- CSV ---- */
+function exportCSV(){
+  var head=["Vendor","Description","Category","Prior Year Amount","Current Year Amount","Term Start","Term End","Status","Paid On","PO","Invoice","Primary Contact","Documents"];
+  var rows=items.map(function(i){
+    var p=i.procurement||{}; var c=(i.contacts||[])[0]?i.contacts[0].name+" <"+i.contacts[0].email+">":"";
+    var docs=(i.attachments||[]).map(function(a){return a.name;}).join("; ");
+    return [i.vendor,i.description,i.category,i.priorAmount,i.amount,i.termStart,i.termEnd,i.status,i.paidOn||"",p.po||"",p.invoice||"",c,docs];
+  });
+  var csv=[head].concat(rows).map(function(r){ return r.map(function(c){return '"'+String(c==null?"":c).replace(/"/g,'""')+'"';}).join(","); }).join("\n");
+  var blob=new Blob([csv],{type:"text/csv"}); var a=document.createElement("a");
+  a.href=URL.createObjectURL(blob); a.download="UCAPS_License_Renewals.csv"; a.click();
+}
+
+/* ---- cycle actions ---- */
+function newCycle(){
+  if(confirm("Start a new renewal cycle?\n\nThis year's Current-year amounts move into Prior year, every status resets to \"Not Started,\" and Paid-on dates clear. Current-year amounts are kept as a starting point \u2014 update them as new quotes arrive.")){
+    items.forEach(function(i){ i.priorAmount=Number(i.amount)||0; i.status="Not Started"; i.paidOn=""; });
+    save(); renderAll();
+    if(document.getElementById("drawer-ov").classList.contains("show") && !editing && currentView) openDrawer(currentView);
+  }
+}
+function restoreFY26(){
+  if(confirm("Restore the original FY26 data?\n\nThis discards all of your edits and added agreements.")){
+    clearAttachmentBlobs();
+    items=normalize(SEED.map(function(s){return JSON.parse(JSON.stringify(s));}));
+    save(); closeDrawer(); renderAll();
+  }
+}
+
+/* ---- events ---- */
+document.addEventListener("click",function(ev){
+  var t=ev.target.closest("[data-action]");
+  if(t){
+    var act=t.getAttribute("data-action"), id=t.getAttribute("data-id"), n=parseInt(t.getAttribute("data-index"),10);
+    if(act==="open"){ openDrawer(id); }
+    else if(act==="close-drawer"){ closeDrawer(); }
+    else if(act==="edit"){ enterEdit(id); }
+    else if(act==="add"){ addAgreement(); }
+    else if(act==="save-edit"){ saveEdit(); }
+    else if(act==="cancel-edit"){ cancelEdit(); }
+    else if(act==="del-agreement"){ deleteAgreement(); }
+    else if(act==="add-line"){ addLineItem(); }
+    else if(act==="rm-line"){ removeLineItem(n); }
+    else if(act==="add-contact"){ addContact(); }
+    else if(act==="rm-contact"){ removeContact(n); }
+    else if(act==="sum-amount"){ sumToAmount(); }
+    else if(act==="att-file"){ currentAttachTarget=id; var fi=document.getElementById("att-file-input"); if(fi){ fi.value=""; fi.click(); } }
+    else if(act==="att-link-toggle"){ var lf=document.getElementById("att-link-form"); if(lf) lf.classList.toggle("show"); }
+    else if(act==="att-link-add"){ addLink(id); }
+    else if(act==="att-open"){ openAttachment(t.getAttribute("data-att")); }
+    else if(act==="att-download"){ downloadAttachment(t.getAttribute("data-att")); }
+    else if(act==="att-remove"){ removeAttachment(id, t.getAttribute("data-att")); }
+    else if(act==="att-close"){ closeAtt(); }
+    else if(act==="email"){ closeDrawer(); openEmail(id); }
+    else if(act==="close-email"){ closeEmail(); }
+    else if(act==="copy"){ doCopy(); }
+    else if(act==="mailto"){ doMailto(t); }
+    else if(act==="export"){ exportCSV(); }
+    else if(act==="newcycle"){ newCycle(); }
+    else if(act==="restore"){ restoreFY26(); }
+    return;
+  }
+  var seg=ev.target.closest("#seg-cat button");
+  if(seg){ ui.cat=seg.getAttribute("data-cat"); Array.prototype.forEach.call(seg.parentNode.children,function(b){b.classList.remove("on");}); seg.classList.add("on"); renderTable(); return; }
+  if(ev.target.id==="drawer-ov" && !editing) closeDrawer();
+  if(ev.target.id==="email-ov") closeEmail();
+  if(ev.target.id==="att-ov") closeAtt();
+});
+document.addEventListener("change",function(ev){
+  if(ev.target.getAttribute && ev.target.getAttribute("data-role")==="status"){
+    var i=byId(ev.target.getAttribute("data-id")); if(i){ i.status=ev.target.value; save(); renderTable(); }
+  } else if(ev.target.id==="sel-status"){ ui.stat=ev.target.value; renderTable(); }
+  else if(ev.target.id==="sel-sort"){ ui.sortBy=ev.target.value; renderTable(); }
+  else if(ev.target.id==="att-file-input"){ if(ev.target.files && ev.target.files[0]) handleFileChosen(ev.target.files[0]); }
+});
+document.addEventListener("input",function(ev){ if(ev.target.id==="search"){ ui.query=ev.target.value; renderTable(); } });
+document.addEventListener("keydown",function(ev){ if(ev.key==="Escape"){ if(editing) cancelEdit(); else { closeDrawer(); closeEmail(); } } });
+
+/* ---- init ---- */
+document.getElementById("today").textContent=TODAY.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+document.getElementById("sel-status").innerHTML='<option value="All">All</option>'+STAGES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join("");
+Promise.resolve(load()).then(function(){ normalize(items); renderAll(); });
+
+</script>
+</body>
+</html>
