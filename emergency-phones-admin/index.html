@@ -1,0 +1,651 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS Emergency Phone — Admin Console</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../ucaps_shared.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Public Sans',-apple-system,sans-serif;background:#f4f6f8;min-height:100vh}
+  #root{min-height:100vh}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // Password gate (from ucaps_shared.js)
+  if (typeof ucapsGate === "function") ucapsGate();
+
+  // ── window.storage shim → Supabase ──────────────────────────────
+  // The app was written for the Claude artifact storage API. We redirect
+  // those same calls to the shared Supabase db so data syncs across devices.
+  window.storage = {
+    async get(key) {
+      try {
+        const val = await db.get(key);
+        return val != null ? { value: typeof val === "string" ? val : JSON.stringify(val) } : null;
+      } catch (e) { return null; }
+    },
+    async set(key, value) {
+      try {
+        // value comes in already JSON-stringified from the app
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        await db.set(key, parsed);
+      } catch (e) {
+        await db.set(key, value);
+      }
+    }
+  };
+</script>
+
+<script type="text/babel" data-presets="react,typescript" data-type="module">
+const { useState, useEffect, useMemo, useRef, useCallback, Fragment } = React;
+const Papa = window.Papa;
+
+
+
+const BASE_PHONES = [{"id":"ep_0014","loc":"Emer Fletcher Lot Salem St. Bus","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833076","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"","order":5,"seq":1},{"id":"ep_0006","loc":"Emer Fletcher Lot West","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833077","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Whiting street side","order":10,"seq":2},{"id":"ep_0005","loc":"Emer Fletcher Lot East","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833078","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Dane St Side","order":15,"seq":3},{"id":"ep_0007","loc":"EMER Salem Lot Rear","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"R733","ext":"9784833086","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"","order":20,"seq":4},{"id":"ep_0063","loc":"Emer N. Garage 1st Floor Southwest","campus":"North","building":"","floor":"NPG-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41789","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"N. Garage 1st Fl. SW","order":20,"seq":5},{"id":"ep_0008","loc":"EMER Salem Lot Booth","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833085","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"","order":25,"seq":6},{"id":"ep_0253","loc":"Emer Meehan 3rd Floor","campus":"East","building":"Meehan Student Center","floor":"UCC-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41729","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Meehan 3rd Floor","order":30,"seq":7},{"id":"ep_0252","loc":"Emer Meehan 2nd Floor","campus":"East","building":"Meehan Student Center","floor":"UCC-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41728","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Meehan 2nd Floor","order":35,"seq":8},{"id":"ep_0251","loc":"Emer Meehan 1st Floor","campus":"East","building":"Meehan Student Center","floor":"UCC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41727","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Meehan 1st Floor","order":40,"seq":9},{"id":"ep_0009","loc":"EMER Pawtucket Lot","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833087","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"","order":45,"seq":10},{"id":"ep_0011","loc":"Emer Howe Bridge 1","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833052","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Howe Bridge 1","order":50,"seq":11},{"id":"ep_0012","loc":"Emer Howe Bridge 3","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833054","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Howe Bridge 3","order":55,"seq":12},{"id":"ep_0089","loc":"Emer ETIC Plymouth St.","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41269","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"ETIC Plymouth St.","order":60,"seq":13},{"id":"ep_0205","loc":"Emer ETIC Lobby","campus":"North","building":"","floor":"ETIC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41281","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"ETIC Lobby","order":65,"seq":14},{"id":"ep_0088","loc":"Emer ETIC Quad","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41282","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"ETIC Quad","order":70,"seq":15},{"id":"ep_0196","loc":"Emer Lydon Basement by Starbucks","campus":"North","building":"Lydon Library","floor":"LYD-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41699","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Lydon Basement by Starbucks","order":75,"seq":16},{"id":"ep_0195","loc":"Emer Lydon Basement","campus":"North","building":"Lydon Library","floor":"LYD-0","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41459","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Lydon Basement","order":80,"seq":17},{"id":"ep_0194","loc":"Emer Southwick Tunnel","campus":"North","building":"Lydon Library","floor":"LYD-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41101","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Southwick Tunnel","order":85,"seq":18},{"id":"ep_0225","loc":"Emer Smith Tunnel","campus":"North","building":"Lydon Library","floor":"LYD-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41102","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Smith Tunnell","order":90,"seq":19},{"id":"ep_0199","loc":"Emer Lydon 4th Floor","campus":"North","building":"Lydon Library","floor":"LYD-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41463","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Lydon 4th Fl. PO","order":95,"seq":20},{"id":"ep_0198","loc":"Emer Lydon 3rd Floor","campus":"North","building":"Lydon Library","floor":"LYD-3","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41462","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Lydon 3rd Fl. PO","order":100,"seq":21},{"id":"ep_0197","loc":"Emer Lydon 2nd Floor","campus":"North","building":"Lydon Library","floor":"LYD-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41461","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Lydon 2nd Fl. PO","order":105,"seq":22},{"id":"ep_0204","loc":"Emer Alumin Lib. 1st fl ev","campus":"North","building":"Alumni Hall","floor":"ALU-0","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833038","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Alumni 1FL","order":110,"seq":23},{"id":"ep_0087","loc":"EMER ALU EXT Front Vestibule","campus":"North","building":"Alumni Hall","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833039","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Alumni Exterior Atrium","order":115,"seq":24},{"id":"ep_0203","loc":"PTB 4th floor","campus":"North","building":"Pulichino Tong Business Center","floor":"PTB-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45949","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"PTB 4th lobby","order":120,"seq":25},{"id":"ep_0202","loc":"Emer PTB 3rd floor","campus":"North","building":"Pulichino Tong Business Center","floor":"PTB-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45948","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"PTB 3rd lobby","order":125,"seq":26},{"id":"ep_0201","loc":"Emer PTB 2nd floor","campus":"North","building":"Pulichino Tong Business Center","floor":"PTB-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45947","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"PTB 2nd lobby","order":130,"seq":27},{"id":"ep_0200","loc":"Emer PTB 1st floor","campus":"North","building":"Pulichino Tong Business Center","floor":"PTB-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45946","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"PTB 1st lobby","order":135,"seq":28},{"id":"ep_0250","loc":"Emer PTB Basement","campus":"North","building":"Pulichino Tong Business Center","floor":"PTB-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45809","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"PTB basement","order":140,"seq":29},{"id":"ep_0086","loc":"Emer PTB exterior rear parking lot","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"45950","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"PTB ext parking lot","order":145,"seq":30},{"id":"ep_0085","loc":"Emer Uni. Ave. Ext front Tong Building","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41433","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"PTB EXT.","order":150,"seq":31},{"id":"ep_0177","loc":"Emer Olsen 6th Floor","campus":"North","building":"Olsen Hall","floor":"OLS-6","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41606","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olsen 6th Floor","order":155,"seq":32},{"id":"ep_0176","loc":"Emer Olsen 5th Floor","campus":"North","building":"Olsen Hall","floor":"OLS-5","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41604","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olsen 5th Floor","order":160,"seq":33},{"id":"ep_0175","loc":"Emer Olsen 4th Floor","campus":"North","building":"Olsen Hall","floor":"OLS-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41602","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Olsen 4th Floor","order":165,"seq":34},{"id":"ep_0174","loc":"Emer Olsen 3rd Floor","campus":"North","building":"Olsen Hall","floor":"OLS-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833057","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olsen 3rd Floor","order":170,"seq":35},{"id":"ep_0173","loc":"Emer Olsen 2nd Floor","campus":"North","building":"Olsen Hall","floor":"OLS-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833056","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olsen 2nd Floor","order":175,"seq":36},{"id":"ep_0172","loc":"Emer Olsen Lobby","campus":"North","building":"Olsen Hall","floor":"OLS-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41457","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olsen Lobby","order":180,"seq":37},{"id":"ep_0090","loc":"EMER Riverside Sparks","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"LS1000","ext":"9784833082","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"CORNER OF RIVERSIDE/SPARKS. The Sparks phone terminates in north garage with PoE injector at base of phone in fiberglass enclosure","order":185,"seq":38},{"id":"ep_0003","loc":"EMER Riverside Lot A","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833071","conn":"Ethernet","mount":"TAP-ETP-MT-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Terminates in press box","order":190,"seq":39},{"id":"ep_0076","loc":"Emer N. Garage 6th Floor Southwest","campus":"North","building":"","floor":"NPG-6","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41777","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"1","speakers":"Yes","notes":"N. Garage 6th Fl. SW","order":195,"seq":40},{"id":"ep_0075","loc":"Emer N. Garage 5th Floor Southwest","campus":"North","building":"","floor":"NPG-5","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41797","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"N. Garage 5th Fl. SW","order":200,"seq":41},{"id":"ep_0070","loc":"Emer N. Garage 4th Floor Southwest","campus":"North","building":"","floor":"NPG-4","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41795","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"N. Garage 4th Fl. SW","order":205,"seq":42},{"id":"ep_0069","loc":"Emer N. Garage 3rd Floor Southwest","campus":"North","building":"","floor":"NPG-3","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41793","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"N. Garage 3rd Fl. SW","order":210,"seq":43},{"id":"ep_0064","loc":"Emer N. Garage 2nd Floor Southwest","campus":"North","building":"","floor":"NPG-2","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41791","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"N. Garage 2nd Fl. SW","order":215,"seq":44},{"id":"ep_0060","loc":"Emer N. Garage 1st Floor Service Entrance","campus":"North","building":"","floor":"NPG-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41788","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 1st SRU Entrance","order":225,"seq":45},{"id":"ep_0061","loc":"N. Garage 1st Fl. NE","campus":"North","building":"","floor":"NPG-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41787","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 1st Fl. NE","order":230,"seq":46},{"id":"ep_0062","loc":"Emer N. Garage 1st Floor Lobby","campus":"North","building":"","floor":"NPG-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41790","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 1st Fl. Lobby","order":235,"seq":47},{"id":"ep_0065","loc":"Emer N. Garage 2nd Floor Northeast","campus":"North","building":"","floor":"NPG-2","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41786","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 2nd Fl. NE","order":240,"seq":48},{"id":"ep_0066","loc":"Emer N. Garage 2nd Floor Lobby","campus":"North","building":"","floor":"NPG-2","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41792","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 2nd Fl. Lobby","order":245,"seq":49},{"id":"ep_0068","loc":"Emer N. Garage 3rd Fl Northeast","campus":"North","building":"","floor":"NPG-3","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41785","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 3rd Fl. NE","order":250,"seq":50},{"id":"ep_0067","loc":"Emer N. Garage 3rd Floor Lobby","campus":"North","building":"","floor":"NPG-3","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41794","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 3rd Fl. Lobby","order":255,"seq":51},{"id":"ep_0071","loc":"Emer N. Garage 4th Northeast","campus":"North","building":"","floor":"NPG-4","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41784","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 4th Fl. NE","order":260,"seq":52},{"id":"ep_0072","loc":"Emer N. Garage 4th Floor Lobby","campus":"North","building":"","floor":"NPG-4","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41796","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 4th Fl. Lobby","order":265,"seq":53},{"id":"ep_0074","loc":"Emer N. Garage 5th Floor Northeast","campus":"North","building":"","floor":"NPG-5","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41783","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 5th Fl. NE","order":270,"seq":54},{"id":"ep_0073","loc":"Emer N. Garage 5th Floor Lobby","campus":"North","building":"","floor":"NPG-5","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41776","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 5th Fl. Lobby","order":275,"seq":55},{"id":"ep_0077","loc":"Emer N. Garage 6th Floor Northeast","campus":"North","building":"","floor":"NPG-6","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41782","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 6th Fl. NE","order":280,"seq":56},{"id":"ep_0078","loc":"Emer N. Garage 6th Floor Lobby","campus":"North","building":"","floor":"NPG-6","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41779","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"N. Garage 6th Fl. Lobby","order":285,"seq":57},{"id":"ep_0079","loc":"EMER Olney Bus Crosswalk","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"LS1000","ext":"9784833084","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"OLNEY BUS STOP NEAR SHELTER, Two bus stop phones terminate in G16A IDF.  The switches do not have PoE so they have PoE injectors","order":290,"seq":58},{"id":"ep_0080","loc":"EMER Olney Bus Stop","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"LS1000","ext":"9784833083","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"OLNEY BUS STOP NEAR SHELTER, Two bus stop phones terminate in G16A IDF.  The switches do not have PoE so they have PoE injectors","order":295,"seq":59},{"id":"ep_0171","loc":"Emer Olney Lobby","campus":"North","building":"Olney Hall","floor":"OLN-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41450","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Olney 1st Floor","order":305,"seq":60},{"id":"ep_0170","loc":"Emer Olney Basement","campus":"North","building":"Olney Hall","floor":"OLN-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41449","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"Olney Basement","order":306,"seq":61},{"id":"ep_0178","loc":"Emer Kennedy Lobby","campus":"North","building":"Costello Athletic Center","floor":"COS-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41465","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Kennedy Lobby","order":310,"seq":62},{"id":"ep_0081","loc":"Falmouth Annex Ext. Garage","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833037","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Falmouth Ext. Garage","order":315,"seq":63},{"id":"ep_0183","loc":"Emer Perry 4th Floor","campus":"North","building":"Perry Hall","floor":"PER-4","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833036","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Perry 4th FL Lobby","order":320,"seq":64},{"id":"ep_0182","loc":"Emer Perry 3rd Floor","campus":"North","building":"Perry Hall","floor":"PER-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833035","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Perry 3rd FL Lobby","order":325,"seq":65},{"id":"ep_0181","loc":"Emer Perry 2nd Floor","campus":"North","building":"Perry Hall","floor":"PER-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833034","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Perry 2nd FL Lobby","order":330,"seq":66},{"id":"ep_0180","loc":"Emer Perry 1st FL","campus":"North","building":"Perry Hall","floor":"PER-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833033","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Perry 1st FL Lobby","order":335,"seq":67},{"id":"ep_0184","loc":"Emer Shah 2","campus":"North","building":"Shah Hall","floor":"SHA-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833029","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Shah 2","order":340,"seq":68},{"id":"ep_0185","loc":"EMER Shah 3FL Lobby","campus":"North","building":"Shah Hall","floor":"SHA-3","intext":"Interior","brand":"Code Blue","model":"LS1000","ext":"978-483-3081","conn":"Ethernet","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Shah 3","order":345,"seq":69},{"id":"ep_0186","loc":"Emer Shah 1","campus":"North","building":"Shah Hall","floor":"SHA-1","intext":"Interior","brand":"Ramtel","model":"","ext":"41411","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Shah 1","order":350,"seq":70},{"id":"ep_0187","loc":"Emer Falmouth Basement","campus":"North","building":"Falmouth Hall","floor":"FAL-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41698","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Falmouth Basement","order":355,"seq":71},{"id":"ep_0082","loc":"Emer Shah Exterior Quad","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46285","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Emer SHA Ext Quad","order":360,"seq":72},{"id":"ep_0192","loc":"Emer Southwick New ELEV 4","campus":"North","building":"Southwick Hall","floor":"SOU-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46332","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Pod 4th FL","order":365,"seq":73},{"id":"ep_0191","loc":"Emer Southwick Mew ELEV 3","campus":"North","building":"Southwick Hall","floor":"SOU-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46331","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Pod 3rd FL","order":370,"seq":74},{"id":"ep_0190","loc":"Emer Southwick New ELEV 2","campus":"North","building":"Southwick Hall","floor":"SOU-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46330","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Pod 2nd FL","order":375,"seq":75},{"id":"ep_0189","loc":"Emer Southwick New ELEV G","campus":"North","building":"Southwick Hall","floor":"SOU-1M","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46329","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Pod 1 Ground FL","order":380,"seq":76},{"id":"ep_0188","loc":"Emer Pod 1st. FL","campus":"North","building":"Southwick Hall","floor":"SOU-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46328","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Pod 1st FL","order":385,"seq":77},{"id":"ep_0193","loc":"Emer Southwick 3rd FL","campus":"North","building":"Southwick Hall","floor":"SOU-3","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41588","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Southwick 3rd","order":395,"seq":78},{"id":"ep_0084","loc":"Emer Cumnock 1 FL exterior facing Ball","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833032","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Cumnock 1 FL exterior","order":405,"seq":79},{"id":"ep_0179","loc":"Emer Cumnock Lobby","campus":"North","building":"Cumnock Hall","floor":"CUM-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41473","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Cumnock Lobby","order":410,"seq":80},{"id":"ep_0083","loc":"Emer Univ. Ave. Southwick","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"R733","ext":"9784833058","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Southwick Front","order":415,"seq":81},{"id":"ep_0013","loc":"Emer Howe Bridge 4","campus":"North","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833055","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Howe Bridge 4","order":420,"seq":82},{"id":"ep_0010","loc":"Emer Howe Bridge 2","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833053","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Howe Bridge 2","order":425,"seq":83},{"id":"ep_0266","loc":"EMER GPS Penthouse","campus":"East","building":"Graduate and Professional Studies Center","floor":"GPS-4","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833070","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":430,"seq":84},{"id":"ep_0265","loc":"EMER GPS 3FL Lobby","campus":"East","building":"Graduate and Professional Studies Center","floor":"GPS-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833069","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":435,"seq":85},{"id":"ep_0264","loc":"EMER GPS 2FL Lobby","campus":"East","building":"Graduate and Professional Studies Center","floor":"GPS-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833068","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":440,"seq":86},{"id":"ep_0263","loc":"EMER GPS 1FL Lobby","campus":"East","building":"Graduate and Professional Studies Center","floor":"GPS-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833067","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":445,"seq":87},{"id":"ep_0262","loc":"EMER GPS Basement","campus":"East","building":"Graduate and Professional Studies Center","floor":"GPS-0","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833066","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":450,"seq":88},{"id":"ep_0016","loc":"Emer Fox 1FL Exterior","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41447","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Fox Front","order":455,"seq":89},{"id":"ep_0144","loc":"Emer Fox Lobby","campus":"East","building":"Fox Hall","floor":"FOX-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41485","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"Fox MPR","order":460,"seq":90},{"id":"ep_0143","loc":"Emer Fox 1st FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45401","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 1 Lobby","order":465,"seq":91},{"id":"ep_0145","loc":"Emer Fox 2nd Floor Dining","campus":"East","building":"Fox Hall","floor":"FOX-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833011","conn":"Wireless Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox 2FL","order":470,"seq":92},{"id":"ep_0142","loc":"Emer Fox 18th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-18","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45432","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 18 Lobby","order":475,"seq":93},{"id":"ep_0141","loc":"Emer Fox 17th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-17","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45431","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 17 Lobby","order":480,"seq":94},{"id":"ep_0140","loc":"Emer Fox 16th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-16","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45430","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 16 Lobby","order":485,"seq":95},{"id":"ep_0139","loc":"Emer Fox 15th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-15","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45429","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 15 Lobby","order":490,"seq":96},{"id":"ep_0138","loc":"Emer Fox 14th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-14","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45428","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Flr 14 Lobby","order":495,"seq":97},{"id":"ep_0137","loc":"Emer Fox 13th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-13","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45427","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 13 Lobby","order":500,"seq":98},{"id":"ep_0136","loc":"Emer Fox 12th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-12","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45426","conn":"Analog","mount":"R-906-Inset","buttons":"3","cameras":"0","speakers":"No","notes":"Emer Fox Flr 12 Lobby","order":505,"seq":99},{"id":"ep_0135","loc":"Emer Fox 11th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-11","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45425","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 11 Lobby","order":510,"seq":100},{"id":"ep_0134","loc":"Emer Fox 10th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-10","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45424","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 10 Lobby","order":515,"seq":101},{"id":"ep_0133","loc":"Emer Fox 9th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-9","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45423","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox 9th Lobby","order":520,"seq":102},{"id":"ep_0132","loc":"Emer Fox 8th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-8","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45422","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 8 Lobby","order":525,"seq":103},{"id":"ep_0131","loc":"Emer Fox 7th Fl elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-7","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45421","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 7 Lobby","order":530,"seq":104},{"id":"ep_0130","loc":"Emer Fox 6th Fl elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-6","intext":"Interior","brand":"Code Blue","model":"LS1000","ext":"9784833093","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 6 Lobby","order":535,"seq":105},{"id":"ep_0129","loc":"Emer Fox 5th FL lobby","campus":"East","building":"Fox Hall","floor":"FOX-5","intext":"Interior","brand":"Code Blue","model":"LS1000","ext":"9784833092","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 5 Lobby","order":540,"seq":106},{"id":"ep_0128","loc":"Emer Fox 4th FL elevator lobby","campus":"East","building":"Fox Hall","floor":"FOX-4","intext":"Interior","brand":"Code Blue","model":"LS1000","ext":"9784833091","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Emer Fox Flr 4 Lobby","order":545,"seq":107},{"id":"ep_0015","loc":"Emer Leitch Exterior Front","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41574","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Leitch Exterior","order":550,"seq":108},{"id":"ep_0152","loc":"Emer Leitch 1st Floor","campus":"East","building":"Leitch Hall","floor":"LEI-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41572","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Leitch 1st floor","order":555,"seq":109},{"id":"ep_0156","loc":"Emer Leitch Basement","campus":"East","building":"Leitch Hall","floor":"LEI-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41571","conn":"Analog","mount":"R-906-Inset","buttons":"2","cameras":"0","speakers":"No","notes":"Leitch Basement","order":560,"seq":110},{"id":"ep_0153","loc":"Emer Leitch 2nd floor","campus":"East","building":"Leitch Hall","floor":"LEI-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41575","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Leitch 2nd floor","order":565,"seq":111},{"id":"ep_0154","loc":"Emer Leitch 3rd floor","campus":"East","building":"Leitch Hall","floor":"LEI-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41576","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Leitch 3rd floor","order":570,"seq":112},{"id":"ep_0155","loc":"Emer Leitch 4th floor","campus":"East","building":"Leitch Hall","floor":"LEI-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41957","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Leitch 4th floor","order":575,"seq":113},{"id":"ep_0017","loc":"Emer Leitch Exterior Bougeois Side","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41045","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Leitch Ext Side","order":580,"seq":114},{"id":"ep_0019","loc":"EMER Donahue Quad","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833072","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Terminates in Leitch MDF","order":585,"seq":115},{"id":"ep_0018","loc":"Emer Bourgeois Exterior West","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41142","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Bourgeois Side","order":590,"seq":116},{"id":"ep_0151","loc":"Emer Donahue Lobby","campus":"East","building":"Donahue Hall","floor":"DON-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"45093","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"Donahue Lobby","order":595,"seq":117},{"id":"ep_0020","loc":"Emer Donahue Circle","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41554","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Bourgeois G","order":600,"seq":118},{"id":"ep_0021","loc":"Emer Bourgeois Exterior","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41492","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Bourgeois Front","order":605,"seq":119},{"id":"ep_0146","loc":"Emer Bourgeois 1st Floot","campus":"East","building":"Bourgeois Hall","floor":"BOU-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41120","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Bourgeois 1st floor","order":610,"seq":120},{"id":"ep_0150","loc":"Emer Bourgeois Basement","campus":"East","building":"Bourgeois Hall","floor":"BOU-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41138","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Bourgeois SO Basement","order":615,"seq":121},{"id":"ep_0149","loc":"Emer Bourgeois 4th Floor","campus":"East","building":"Bourgeois Hall","floor":"BOU-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41352","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Bourgeois 4th floor","order":620,"seq":122},{"id":"ep_0148","loc":"Emer Bourgeois 3rd Floor","campus":"East","building":"Bourgeois Hall","floor":"BOU-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41325","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Bourgeois 3rd floor","order":625,"seq":123},{"id":"ep_0147","loc":"Emer Bourgeois 2nd Floor","campus":"East","building":"Bourgeois Hall","floor":"BOU-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41151","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Bourgeois 2nd Floor","order":630,"seq":124},{"id":"ep_0038","loc":"Emer Rec Center Circle","campus":"East","building":"Campus Recreation Center","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833074","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Rec Center Outside","order":635,"seq":125},{"id":"ep_0157","loc":"Emer Rec Center Lobby","campus":"East","building":"Recreation Complex","floor":"CRC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41531","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Rec Center Lobby","order":640,"seq":126},{"id":"ep_0159","loc":"Emer Rec Center Women\u2019s Rm.","campus":"East","building":"Recreation Complex","floor":"CRC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41529","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Rec Center Womens","order":645,"seq":127},{"id":"ep_0158","loc":"Emer Rec Center Men\u2019s Rm.","campus":"East","building":"Recreation Complex","floor":"CRC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41530","conn":"Analog","mount":"R-906-Inset","buttons":"1","cameras":"0","speakers":"No","notes":"Rec Center Mens","order":650,"seq":128},{"id":"ep_0039","loc":"Emer Rec Center Baseball","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41533","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"RC Baseball","order":655,"seq":129},{"id":"ep_0023","loc":"Emer E. Garage Grnd Front","campus":"East","building":"East Parking Garage","floor":"EPG-1","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41760","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 1st Front","order":660,"seq":130},{"id":"ep_0026","loc":"Emer E. Garage 1st Front","campus":"East","building":"East Parking Garage","floor":"EPG-2","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41762","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 2nd Front","order":665,"seq":131},{"id":"ep_0029","loc":"Emer E. Garage 2nd Front","campus":"East","building":"East Parking Garage","floor":"EPG-3","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41763","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 3rd Front","order":670,"seq":132},{"id":"ep_0032","loc":"Emer E. Garage 3rd Front","campus":"East","building":"East Parking Garage","floor":"EPG-4","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41764","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 4th Front","order":675,"seq":133},{"id":"ep_0035","loc":"Emer E. Garage 4th Front","campus":"East","building":"East Parking Garage","floor":"EPG-5","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41771","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 5th Front","order":680,"seq":134},{"id":"ep_0037","loc":"Emer E. Garage 5th Back","campus":"East","building":"East Parking Garage","floor":"EPG-6","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41773","conn":"Analog","mount":"","buttons":"3","cameras":"0","speakers":"No","notes":"Garage 6th Back","order":685,"seq":135},{"id":"ep_0034","loc":"Emer E. Garage 4th Back","campus":"East","building":"East Parking Garage","floor":"EPG-5","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41772","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 5th Back","order":690,"seq":136},{"id":"ep_0031","loc":"Emer E. Garage 3rd Back","campus":"East","building":"East Parking Garage","floor":"EPG-4","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41775","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 4th Back","order":695,"seq":137},{"id":"ep_0028","loc":"Emer E. Garage 2nd Back","campus":"East","building":"East Parking Garage","floor":"EPG-3","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41774","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 3rd Back","order":700,"seq":138},{"id":"ep_0025","loc":"Emer E. Garage 1st Back","campus":"East","building":"East Parking Garage","floor":"EPG-2","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41767","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 2nd Back","order":705,"seq":139},{"id":"ep_0022","loc":"Emer E. Garage Grnd Back","campus":"East","building":"East Parking Garage","floor":"EPG-1","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41761","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 1st Back","order":710,"seq":140},{"id":"ep_0024","loc":"Emer E. Garage Grnd Baseball","campus":"East","building":"East Parking Garage","floor":"EPG-1","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41766","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Garage 1st Baseball","order":715,"seq":141},{"id":"ep_0027","loc":"Emer E. Garage 1st Baseball","campus":"East","building":"East Parking Garage","floor":"EPG-2","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41768","conn":"Analog","mount":"R-926-Wall","buttons":"","cameras":"0","speakers":"No","notes":"Garage 2nd Baseball","order":720,"seq":142},{"id":"ep_0030","loc":"Emer E. Garage 2nd Baseball","campus":"East","building":"East Parking Garage","floor":"EPG-3","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41769","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"3rd Garage Baseball","order":725,"seq":143},{"id":"ep_0033","loc":"Emer E. Garage 3rd Baseball","campus":"East","building":"East Parking Garage","floor":"EPG-4","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41770","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage 4th Baseball","order":730,"seq":144},{"id":"ep_0036","loc":"Emer e. Garage 4th Baseball","campus":"East","building":"East Parking Garage","floor":"EPG-5","intext":"Exterior","brand":"Ramtel","model":"R734","ext":"41771","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Garage","order":735,"seq":145},{"id":"ep_0040","loc":"EMER USuites Bus Stop","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833073","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Aiken St. Exterior","order":740,"seq":146},{"id":"ep_0041","loc":"Perkins St. Exterior","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46485","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Perkins St. Exterior","order":745,"seq":147},{"id":"ep_0042","loc":"Hall St. Exterior","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46486","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Hall St. Exterior","order":750,"seq":148},{"id":"ep_0160","loc":"Emer University Suites 1st Floor","campus":"East","building":"University Suites Residence Hall","floor":"USR-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46480","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Usuites 1st Floor","order":755,"seq":149},{"id":"ep_0161","loc":"Emer University Suites 2nd Floor","campus":"East","building":"University Suites Residence Hall","floor":"USR-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46481","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Usuites 2nd Floor","order":760,"seq":150},{"id":"ep_0162","loc":"Emer University Suites 3rd Floor","campus":"East","building":"University Suites Residence Hall","floor":"USR-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46482","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Usuites 3rd Floor","order":765,"seq":151},{"id":"ep_0164","loc":"Emer University Suites 4th Floor","campus":"East","building":"University Suites Residence Hall","floor":"USR-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46483","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"","notes":"Usuites 4th Floor","order":770,"seq":152},{"id":"ep_0163","loc":"Emer University Suites 5th Floor","campus":"East","building":"University Suites Residence Hall","floor":"USR-5","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46484","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Usuites 5th Floor","order":775,"seq":153},{"id":"ep_0043","loc":"Emer Perkins Lot","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833075","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Perkins Lot","order":780,"seq":154},{"id":"ep_0052","loc":"Emer 45LAW Rear","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833027","conn":"Analog","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer 45LAW Rear","order":785,"seq":155},{"id":"ep_0051","loc":"Emer 45LAW Main Entrance","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833028","conn":"Analog","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer 45LAW Main Entrance","order":790,"seq":156},{"id":"ep_0165","loc":"Emer Riverhawk Village Lobby","campus":"East","building":"River Hawk Village","floor":"RHV-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833019","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer RVH 1 FL","order":795,"seq":157},{"id":"ep_0166","loc":"Emer Riverhawk Billage 2nd Floor","campus":"East","building":"River Hawk Village","floor":"RHV-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833020","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer RHV 2 FL","order":800,"seq":158},{"id":"ep_0167","loc":"Emer Riverhawk Village 3rd FL","campus":"East","building":"River Hawk Village","floor":"RHV-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833021","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer RHV 3 FL","order":805,"seq":159},{"id":"ep_0168","loc":"Emer Riverhawk Village 4th Floor","campus":"East","building":"River Hawk Village","floor":"RHV-4","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833022","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer RHV 4 FL","order":810,"seq":160},{"id":"ep_0169","loc":"Emer Riverhawk Village 5th Floor","campus":"East","building":"River Hawk Village","floor":"RHV-5","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833023","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Emer RHV 5 FL","order":815,"seq":161},{"id":"ep_0044","loc":"Emer HSG 1FL Perkins St","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833014","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG 1FL Perkins St","order":820,"seq":162},{"id":"ep_0047","loc":"Emer HSG 2FL Perkins St","campus":"East","building":"","floor":"HSG-2","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833016","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG 2FL Perkins St","order":825,"seq":163},{"id":"ep_0049","loc":"Emer HSG 3FL Perkins","campus":"East","building":"","floor":"HSG-3","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833012","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"1","speakers":"No","notes":"Emer HSG 3FL Perkins St","order":830,"seq":164},{"id":"ep_0050","loc":"Emer HSG Roof Center","campus":"East","building":"","floor":"HSG-3","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833017","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG Roof Center","order":835,"seq":165},{"id":"ep_0048","loc":"Emer HSG 3FL Hall St.","campus":"East","building":"","floor":"HSG-3","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833018","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG 3FL Hall St","order":840,"seq":166},{"id":"ep_0046","loc":"Emer HSG 2FL Hall St","campus":"East","building":"","floor":"HSG-2","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833015","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG 2FL Hall St","order":845,"seq":167},{"id":"ep_0045","loc":"Emer HSG 1FL Hall St","campus":"East","building":"","floor":"HSG-1","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833013","conn":"Analog","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"No","notes":"Emer HSG 1FL Hall St","order":850,"seq":168},{"id":"ep_0053","loc":"EMER TSO Bridge","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833031","conn":"Ethernet","mount":"CB-1-Column","buttons":"1","cameras":"2","speakers":"Yes","notes":"Emer TSO Bridge","order":855,"seq":169},{"id":"ep_0055","loc":"Emer Tsongas Walkway","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833030","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"2","speakers":"Yes","notes":"Emer TSO Riverwalk","order":860,"seq":170},{"id":"ep_0056","loc":"Emer Tsongas Lot C","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833048","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Tsongas Lot C","order":865,"seq":171},{"id":"ep_0054","loc":"Emer Tsongas Lot B","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833049","conn":"Wireless Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Tsongas lot B near Ayoitte","order":870,"seq":172},{"id":"ep_0059","loc":"Emer Aiken Fields","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833024","conn":"Ethernet","mount":"CB-1-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Emer Aiken Fields (Cabot St)","order":875,"seq":173},{"id":"ep_0058","loc":"Emer Aiken St Canal","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833025","conn":"Ethernet","mount":"CB-1-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Emer Aiken St Canal","order":880,"seq":174},{"id":"ep_0057","loc":"EMER Cabot St Canal","campus":"East","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833026","conn":"Ethernet","mount":"CB-1-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Aiken St Cabot St. side","order":885,"seq":175},{"id":"ep_0224","loc":"Emer Moloney Front Lobby","campus":"South","building":"Moloney Performing Arts Center","floor":"MPAC-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41283","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Moloney Lobby","order":890,"seq":176},{"id":"ep_0127","loc":"EMER South Quad near McGauvran","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833089","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"McG Exterior / 10.34.170.200","order":900,"seq":177},{"id":"ep_0212","loc":"Emer Mcgauvrin 1st Lobby","campus":"South","building":"McGauvran Center","floor":"MCG-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46570","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"McG 1 Lobby","order":905,"seq":178},{"id":"ep_0213","loc":"Emer Mcgauvrin 2nd Lobby","campus":"South","building":"McGauvran Center","floor":"MCG-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46577","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"McG 2 Lobby","order":910,"seq":179},{"id":"ep_0214","loc":"Emer Mcgauvrin 3rd Lobby","campus":"South","building":"McGauvran Center","floor":"MCG-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46581","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"McG 3 Lobby","order":915,"seq":180},{"id":"ep_0254","loc":"McG 4 Lobby","campus":"South","building":"McGauvran Center","floor":"MCG-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46591","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":920,"seq":181},{"id":"ep_0227","loc":"Emer Mcgauvrin 3rd Floor Service Elev.","campus":"South","building":"McGauvran Center","floor":"MCG-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46584","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"McG 3 SR","order":925,"seq":182},{"id":"ep_0228","loc":"Emer Mcgauvrin 2nd Floor Service Elev.","campus":"South","building":"McGauvran Center","floor":"MCG-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46578","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":930,"seq":183},{"id":"ep_0229","loc":"Emer Mcgauvrin Basement Service Elev.","campus":"South","building":"McGauvran Center","floor":"MCG-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46568","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":935,"seq":184},{"id":"ep_0226","loc":"Emer Mcgauvrin Basement","campus":"South","building":"McGauvran Center","floor":"MCG-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"46566","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"McG Bsmt","order":940,"seq":185},{"id":"ep_0206","loc":"Emer O\u2019Leary Lobby","campus":"South","building":"O'Leary Library","floor":"OLE-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41481","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"O\u2019Leary Lobby","order":945,"seq":186},{"id":"ep_0207","loc":"Emer O\u2019Leary Mezzanine","campus":"South","building":"O'Leary Library","floor":"OLE-2M","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41476","conn":"","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"O\u2019Leary Mezzanine","order":950,"seq":187},{"id":"ep_0208","loc":"Emer O\u2019Leary 2nd Floor","campus":"South","building":"O'Leary Library","floor":"OLE-2","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41477","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"O\u2019Leary 2nd Floor","order":955,"seq":188},{"id":"ep_0209","loc":"Emer OLL Lift","campus":"South","building":"","floor":"OLE-3","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41478","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"O\u2019Leary 3rd Floor","order":960,"seq":189},{"id":"ep_0255","loc":"O'Leary 3rd Floor","campus":"South","building":"O'Leary Library","floor":"OLE-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41913","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":965,"seq":190},{"id":"ep_0210","loc":"Emer O\u2019Leary 4th Floor","campus":"South","building":"O'Leary Library","floor":"OLE-4","intext":"Interior","brand":"Ramtel","model":"R734","ext":"41479","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"O\u2019Leary 4th Floor","order":970,"seq":191},{"id":"ep_0211","loc":"Emer O\u2019Leary 5th Floor","campus":"South","building":"O'Leary Library","floor":"OLE-5","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41480","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"O\u2019Leary 5th Floor","order":975,"seq":192},{"id":"ep_0093","loc":"EMER Wilder Visitor Lot","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833090","conn":"Ethernet","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Wilder Pay","order":980,"seq":193},{"id":"ep_0091","loc":"Emer Wilder Lot Rear","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41422","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Wilder Lot Rear","order":985,"seq":194},{"id":"ep_0092","loc":"Emer Wilder Lot Front","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41423","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Wilder Lot Front","order":990,"seq":195},{"id":"ep_0215","loc":"Emer HSS 1st Floor","campus":"South","building":"Health & Social Sciences Building","floor":"HSS-1","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41128","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"HSS 1st Floor","order":995,"seq":196},{"id":"ep_0216","loc":"Emer HSS 2nd Floor","campus":"South","building":"Health & Social Sciences Building","floor":"HSS-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41129","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"HSS 2nd Floor","order":1000,"seq":197},{"id":"ep_0217","loc":"Emer HSS 3rd Floor","campus":"South","building":"Health & Social Sciences Building","floor":"HSS-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41130","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"HSS 3rd Floor","order":1005,"seq":198},{"id":"ep_0218","loc":"Emer HSS 4th Floor","campus":"South","building":"Health & Social Sciences Building","floor":"HSS-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41131","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"HSS 4th Floor","order":1010,"seq":199},{"id":"ep_0237","loc":"Emer HSS Basement","campus":"South","building":"Health & Social Sciences Building","floor":"HSS-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41263","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"HSS Basement","order":1015,"seq":200},{"id":"ep_0094","loc":"EMER South Quad near Coburn","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833088","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"No","notes":"HSS Exterior","order":1020,"seq":201},{"id":"ep_0117","loc":"Emer 150 Wilder St.","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41121","conn":"","mount":"R-PLC7-Column","buttons":"2","cameras":"","speakers":"","notes":"","order":1025,"seq":202},{"id":"ep_0261","loc":"COB","campus":"South","building":"Coburn Hall","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833065","conn":"Ethernet","mount":"CB-1-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"","order":1030,"seq":203},{"id":"ep_0236","loc":"Emer Coburn 1FL Lobby","campus":"South","building":"Coburn Hall","floor":"COB-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833061","conn":"Ethernet","mount":"CB-6F-Flush","buttons":"1","cameras":"0","speakers":"No","notes":"Coburn Lobby","order":1035,"seq":204},{"id":"ep_0257","loc":"COB 1FL Front Vestibule","campus":"South","building":"Coburn Hall","floor":"COB-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833060","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1040,"seq":205},{"id":"ep_0256","loc":"Coburn Ground Level","campus":"South","building":"Coburn Hall","floor":"COB-0","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833059","conn":"Ethernet","mount":"CB-6F-Flush","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1045,"seq":206},{"id":"ep_0258","loc":"COB 2FL Lobby","campus":"South","building":"Coburn Hall","floor":"COB-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833062","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1050,"seq":207},{"id":"ep_0259","loc":"COB 3FL Lobby","campus":"South","building":"Coburn Hall","floor":"COB-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833063","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1055,"seq":208},{"id":"ep_0260","loc":"COB 4FL Lobby","campus":"South","building":"Coburn Hall","floor":"COB-4","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833064","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1060,"seq":209},{"id":"ep_0232","loc":"Emer Mahoney Lobby","campus":"South","building":"Mahoney Hall","floor":"MAH-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41469","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Mahoney Lobby","order":1065,"seq":210},{"id":"ep_0233","loc":"Emer Mahoney 1st Fl. Back","campus":"South","building":"Mahoney Hall","floor":"MAH-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41680","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Mahoney 1st PO","order":1070,"seq":211},{"id":"ep_0234","loc":"Emer Mahoney 2 Fl. Back","campus":"South","building":"Mahoney Hall","floor":"MAH-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41676","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Mahoney 2nd PO","order":1075,"seq":212},{"id":"ep_0235","loc":"Emer Mahoney Basement","campus":"South","building":"Mahoney Hall","floor":"MAH-0","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41675","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Mahoney Basement","order":1080,"seq":213},{"id":"ep_0095","loc":"Emer Solomont Way Near Broadway","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41536","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"1","speakers":"Yes","notes":"Solomont End","order":1085,"seq":214},{"id":"ep_0096","loc":"Emer Dugan Front Walk","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41538","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Dugan Front","order":1090,"seq":215},{"id":"ep_0098","loc":"Emer Dugan Rear","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41540","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Dugan Rear","order":1095,"seq":216},{"id":"ep_0223","loc":"Emer Dugan Lobby","campus":"South","building":"Dugan Hall","floor":"DUG-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41468","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Dugan Lobby","order":1100,"seq":217},{"id":"ep_0219","loc":"Emer Weed Lobby","campus":"South","building":"Weed Hall","floor":"WEE-1","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41474","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Weed Lobby","order":1105,"seq":218},{"id":"ep_0220","loc":"Emer Weed 2nd Floor","campus":"South","building":"Weed Hall","floor":"WEE-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41247","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Weed 2nd Floor","order":1110,"seq":219},{"id":"ep_0221","loc":"Emer Weed 3rd Floor","campus":"South","building":"Weed Hall","floor":"WEE-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41248","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Weed 3rd Floor","order":1115,"seq":220},{"id":"ep_0222","loc":"Emer Weed Basement","campus":"South","building":"Weed Hall","floor":"WEE-0","intext":"Interior","brand":"Ramtel","model":"R734","ext":"41498","conn":"Analog","mount":"R-926-Wall","buttons":"2","cameras":"0","speakers":"No","notes":"Weed Basement","order":1120,"seq":221},{"id":"ep_0097","loc":"Emer Sheehy Front","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41499","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Sheehy Exterior","order":1125,"seq":222},{"id":"ep_0230","loc":"Emer Sheehy Main Entrance","campus":"South","building":"Sheehy Hall","floor":"SHE-3","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41490","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"Sheehy/Con Interior","order":1130,"seq":223},{"id":"ep_0231","loc":"Emer Concordia Laundry","campus":"South","building":"Concordia Hall","floor":"CON-0","intext":"Interior","brand":"Ramtel","model":"R2A","ext":"41488","conn":"Analog","mount":"R-926-Wall","buttons":"3","cameras":"0","speakers":"No","notes":"Concordia Laundry","order":1135,"seq":224},{"id":"ep_0115","loc":"Emer Riverview Bus Stop","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41264","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview Bus","order":1140,"seq":225},{"id":"ep_0113","loc":"Emer Riverview (OSB near Garage)","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41265","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview OSB","order":1145,"seq":226},{"id":"ep_0114","loc":"Emer Riverview (SGAR near garage)","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41263","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview OSN","order":1150,"seq":227},{"id":"ep_0116","loc":"Emer Riverview D (tower)","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41264","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview Back","order":1155,"seq":228},{"id":"ep_0120","loc":"Riverview Back Rd.","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46550","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"2","cameras":"0","speakers":"Yes","notes":"Riverview Back Rd.","order":1160,"seq":229},{"id":"ep_0118","loc":"Riverview Suites Park","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46549","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview Suites Park","order":1165,"seq":230},{"id":"ep_0119","loc":"Riverview Suites Garage","campus":"South","building":"","floor":"RIV-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46470","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Riverview Park Garage","order":1170,"seq":231},{"id":"ep_0099","loc":"Emer S. Garage Patio","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46073","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"S Gar Patio","order":1175,"seq":232},{"id":"ep_0100","loc":"Emer S. Garage Ground","campus":"South","building":"","floor":"SPG-1","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46066","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 1S","order":1180,"seq":233},{"id":"ep_0101","loc":"Emer S. Garage 2nd Floor South","campus":"South","building":"","floor":"SPG-2","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46067","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 2S","order":1185,"seq":234},{"id":"ep_0104","loc":"Emer S. Garage 3rd Floor South","campus":"South","building":"","floor":"SPG-3","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46070","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 3S","order":1190,"seq":235},{"id":"ep_0105","loc":"Emer S. Garage 4th Floor South","campus":"South","building":"","floor":"SPG-4","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46068","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 4S","order":1195,"seq":236},{"id":"ep_0108","loc":"Emer S. Garage 5FL South","campus":"South","building":"","floor":"SPG-5","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46071","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"","cameras":"0","speakers":"No","notes":"S Gar 5S","order":1200,"seq":237},{"id":"ep_0109","loc":"EmerS. Garage 6th Floor South","campus":"South","building":"","floor":"SPG-6","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46069","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 6S","order":1205,"seq":238},{"id":"ep_0112","loc":"Emer S. Garage 7th Floor South","campus":"South","building":"","floor":"SPG-7","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46072","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"No","notes":"S Gar 7S","order":1210,"seq":239},{"id":"ep_0111","loc":"Emer S. Garage 7th Floor North","campus":"South","building":"","floor":"SPG-7","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46065","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"1","speakers":"Yes","notes":"S Gar 7N","order":1215,"seq":240},{"id":"ep_0110","loc":"Emer S. Garage 6th Floor North","campus":"South","building":"","floor":"SPG-6","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46064","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"S Gar 6N","order":1220,"seq":241},{"id":"ep_0107","loc":"Emer S. Garage 5th Floor North","campus":"South","building":"","floor":"SPG-5","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46063","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"S Gar 5N","order":1225,"seq":242},{"id":"ep_0106","loc":"Emer S. Garage 4th Floor North","campus":"South","building":"","floor":"SPG-4","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46062","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"S Gar 4N","order":1230,"seq":243},{"id":"ep_0103","loc":"Emer S. Garage 3rd Floor North","campus":"South","building":"","floor":"SPG-3","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46061","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"2","cameras":"0","speakers":"Yes","notes":"S Gar 3N","order":1235,"seq":244},{"id":"ep_0102","loc":"Emer S. Garage 2nd Floor North","campus":"South","building":"","floor":"SPG-2","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"46060","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"S Gar 2N","order":1240,"seq":245},{"id":"ep_0121","loc":"Emer 1499 Middlesex St.","campus":"South","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41299","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"1499 Middlesex St.","order":1245,"seq":246},{"id":"ep_0004","loc":"Emer Bellegarde Boathouse","campus":"Off Campus","building":"UMass Lowell Bellegarde Boathouse","floor":"","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833051","conn":"Ethernet","mount":"CB-2-Wall","buttons":"1","cameras":"0","speakers":"Yes","notes":"Emer Bellegarde Boathouse EXT","order":1250,"seq":247},{"id":"ep_0249","loc":"Emer Boathouse Interior","campus":"Off Campus","building":"UMass Lowell Bellegarde Boathouse","floor":"BEL-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833050","conn":"Ethernet","mount":"CB-6S-Wall","buttons":"1","cameras":"1","speakers":"No","notes":"Emer Bellegarde Boathouse INT","order":1255,"seq":248},{"id":"ep_0267","loc":"EMER 110 Canal Exterior","campus":"Off Campus","building":"110 Canal","floor":"110CAN-1","intext":"Exterior","brand":"Code Blue","model":"IP5000","ext":"9784833079","conn":"","mount":"","buttons":"1","cameras":"0","speakers":"Yes","notes":"Canal St. Exterior","order":1260,"seq":249},{"id":"ep_0268","loc":"EMER 110 Canal 1FL","campus":"Off Campus","building":"110 Canal","floor":"110CAN-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833080","conn":"","mount":"","buttons":"1","cameras":"0","speakers":"","notes":"Canal St. 1st Floor","order":1265,"seq":250},{"id":"ep_0246","loc":"Emer Canal St. 2nd Floor","campus":"Off Campus","building":"110 Canal","floor":"110CAN-2","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41825","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Canal St. 2nd Floor","order":1270,"seq":251},{"id":"ep_0247","loc":"Emer Canal St. 3rd Floor","campus":"Off Campus","building":"110 Canal","floor":"110CAN-3","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41323","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Canal St. 3rd Floor","order":1275,"seq":252},{"id":"ep_0248","loc":"Emer Canal St. 4th Floor","campus":"Off Campus","building":"110 Canal","floor":"110CAN-4","intext":"Interior","brand":"Ramtel","model":"R733","ext":"41331","conn":"Analog","mount":"R-926-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"Canal St. 4th Floor","order":1280,"seq":253},{"id":"ep_0122","loc":"Emer ICC Front by Loop","campus":"ICC","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41709","conn":"Analog","mount":"R-PLC7-Column","buttons":"1","cameras":"0","speakers":"No","notes":"ICC Front","order":1285,"seq":254},{"id":"ep_0123","loc":"Emer ICC Garage side","campus":"ICC","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41568","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Garage side ICC","order":1290,"seq":255},{"id":"ep_0124","loc":"Emer ICC Rear 2","campus":"ICC","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41569","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"2","cameras":"0","speakers":"Yes","notes":"Behind ICC canal side","order":1295,"seq":256},{"id":"ep_0125","loc":"Emer ICC Rear 1","campus":"ICC","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41587","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Behind ICC canal side","order":1300,"seq":257},{"id":"ep_0126","loc":"Emer ICC Loading Dock","campus":"ICC","building":"","floor":"","intext":"Exterior","brand":"Ramtel","model":"R733","ext":"41550","conn":"Analog","mount":"R-PLWG-Wall-light","buttons":"1","cameras":"0","speakers":"Yes","notes":"Outside Loading Dock","order":1305,"seq":258},{"id":"ep_0238","loc":"Emer ICC 2nd Floor near elevators","campus":"ICC","building":"50 Warren Street","floor":"ICC-2","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833040","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 2nd Floor near elevators","order":1320,"seq":259},{"id":"ep_0239","loc":"Emer ICC 3rd Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-3","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833041","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 3rd Floor lobby","order":1335,"seq":260},{"id":"ep_0240","loc":"Emer ICC 4th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-4","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833042","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"","order":1340,"seq":261},{"id":"ep_0241","loc":"Emer ICC 5th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-5","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833043","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 5th Floor lobby","order":1345,"seq":262},{"id":"ep_0242","loc":"Emer ICC 6th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-6","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833044","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 6th floor lobby","order":1350,"seq":263},{"id":"ep_0243","loc":"Emer ICC 7th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-7","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833045","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 7th Floor lobby","order":1355,"seq":264},{"id":"ep_0244","loc":"Emer ICC 8th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-8","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833046","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 8th Floor lobby","order":1360,"seq":265},{"id":"ep_0245","loc":"Emer ICC 9th Floor lobby","campus":"ICC","building":"50 Warren Street","floor":"ICC-9","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833047","conn":"Ethernet","mount":"CB-4-Wall","buttons":"1","cameras":"0","speakers":"No","notes":"ICC 9th Floor lobby","order":1365,"seq":266},{"id":"ep_0000","loc":"EMER East Mass Notification","campus":"East","building":"Meehan Student Center","floor":"UCC-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833299","conn":"","mount":"","buttons":"","cameras":"","speakers":"No","notes":"","order":999999,"seq":267},{"id":"ep_0001","loc":"EMER Mass Notify Test","campus":"East","building":"Meehan Student Center","floor":"UCC-1","intext":"Interior","brand":"Code Blue","model":"IP5000","ext":"9784833300","conn":"","mount":"","buttons":"","cameras":"","speakers":"","notes":"Jon's Office","order":999999,"seq":268},{"id":"ep_0002","loc":"EMER UCAPS Test","campus":"East","building":"Meehan Student Center","floor":"UCC-1","intext":"Interior","brand":"Code Blue","model":"LS1000","ext":"9784833010","conn":"","mount":"","buttons":"","cameras":"","speakers":"","notes":"Jon's Office","order":999999,"seq":269}];
+
+const NAVY = "#003e7e";
+const NAVY_DARK = "#002a57";
+const GOLD = "#fdb515";
+const CAMPUS_ORDER = ["East", "North", "South", "ICC", "Off Campus", "Other"];
+
+const KEY = "ucaps_ep_admin_v1";        // admin-only: log + roster overlay
+const RESULTS_KEY = "ucaps_ep_results_v1"; // SHARED with the field testing app
+async function loadState() {
+  try {
+    // results come from the shared key (written by the testing app + admin)
+    let results = {};
+    try { const rr = await window.storage.get(RESULTS_KEY); if (rr && rr.value) results = JSON.parse(rr.value); } catch (e) {}
+    // log + roster overlay live in the admin-only key
+    let admin = {};
+    try { const ar = await window.storage.get(KEY); if (ar && ar.value) admin = JSON.parse(ar.value); } catch (e) {}
+    return { results, log: admin.log || [], roster: admin.roster || { overrides: {}, added: [], deleted: [] } };
+  } catch (e) { return {}; }
+}
+async function saveResultsShared(results) {
+  try { await window.storage.set(RESULTS_KEY, JSON.stringify(results || {})); } catch (e) {}
+}
+async function saveAdmin(log, roster) {
+  try { await window.storage.set(KEY, JSON.stringify({ log: log || [], roster: roster || { overrides: {}, added: [], deleted: [] } })); } catch (e) {}
+}
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${m}/${d}/${y}`; };
+function toISO(s) {
+  if (!s) return "";
+  s = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  const d = new Date(s); return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+}
+const daysSince = (iso) => { if (!iso) return Infinity; return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); };
+
+function statusOf(rec) {
+  if (!rec || !rec.lastTested) return "untested";
+  const core = [rec.button, rec.mic, rec.speaker];
+  const anyFail = core.some((v) => v === "Not Working") || rec.lights === "No";
+  return anyFail ? "fail" : "pass";
+}
+const STATUS_META = {
+  untested: { label: "Not Tested", color: "#9aa3ad", bg: "#eef0f2" },
+  pass: { label: "Pass", color: "#1a7d3c", bg: "#e3f4e8" },
+  fail: { label: "Needs Attention", color: "#c0392b", bg: "#fbe6e3" },
+};
+const normKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [results, setResults] = useState({});
+  const [log, setLog] = useState([]);
+  const [overlay, setOverlay] = useState({ overrides: {}, added: [], deleted: [] });
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(undefined); // undefined=closed, null=new, {phone}=edit
+
+  useEffect(() => {
+    document.title = "UCAPS Emergency Phone Testing — Admin";
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+    (async () => {
+      const s = await loadState();
+      setResults(s.results || {});
+      setLog(s.log || []);
+      setOverlay(s.roster || { overrides: {}, added: [], deleted: [] });
+      setLoaded(true);
+    })();
+    // Live refresh: pull shared field-test results periodically so the dashboard
+    // reflects tests logged on other devices without a manual reload.
+    const iv = setInterval(async () => {
+      try {
+        if (typeof db === "undefined") return;
+        const remote = await db.get("ucaps_ep_results_v1");
+        if (remote) setResults(remote);
+      } catch (e) {}
+    }, 20000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const commitResults = (r, l) => { setResults(r); setLog(l); saveResultsShared(r); saveAdmin(l, overlay); };
+  const commitOverlay = (o) => { setOverlay(o); saveAdmin(log, o); };
+
+  // effective roster = base (minus deleted, plus overrides) + custom additions, re-sorted & re-sequenced
+  const roster = useMemo(() => {
+    const del = new Set(overlay.deleted || []);
+    const base = BASE_PHONES.filter((p) => !del.has(p.id)).map((p) => ({ ...p, ...(overlay.overrides[p.id] || {}) }));
+    const customs = (overlay.added || []).filter((p) => !del.has(p.id));
+    let all = [...base, ...customs].map((p) => ({ ...p, _ord: (p.order === "" || p.order == null) ? 999999 : (Number(p.order) || 999999) }));
+    all.sort((a, b) => a._ord - b._ord || String(a.loc).localeCompare(String(b.loc)));
+    all.forEach((p, i) => { p.seq = i + 1; });
+    return all;
+  }, [overlay]);
+
+  const isCustom = (id) => (overlay.added || []).some((p) => p.id === id);
+
+  const upsertPhone = (form, editId) => {
+    if (editId) {
+      if (isCustom(editId)) commitOverlay({ ...overlay, added: overlay.added.map((p) => p.id === editId ? { ...p, ...form, id: editId } : p) });
+      else commitOverlay({ ...overlay, overrides: { ...overlay.overrides, [editId]: { ...form } } });
+    } else {
+      const id = "cust_" + Date.now();
+      commitOverlay({ ...overlay, added: [...(overlay.added || []), { ...form, id }] });
+    }
+    setEditing(undefined);
+  };
+  const deletePhone = (id) => {
+    commitOverlay({ ...overlay, deleted: [...(overlay.deleted || []), id], added: (overlay.added || []).filter((p) => p.id !== id) });
+    setEditing(undefined);
+  };
+
+  const stats = useMemo(() => {
+    let tested = 0, pass = 0, fail = 0;
+    roster.forEach((p) => { const s = statusOf(results[p.id]); if (s !== "untested") tested++; if (s === "pass") pass++; if (s === "fail") fail++; });
+    return { total: roster.length, tested, pass, fail, remaining: roster.length - tested };
+  }, [results, roster]);
+
+  const byCampus = useMemo(() => {
+    const map = {};
+    roster.forEach((p) => {
+      const c = p.campus || "Other";
+      if (!map[c]) map[c] = { total: 0, tested: 0, fail: 0 };
+      map[c].total++;
+      const s = statusOf(results[p.id]);
+      if (s !== "untested") map[c].tested++;
+      if (s === "fail") map[c].fail++;
+    });
+    const order = [...CAMPUS_ORDER, ...Object.keys(map).filter((c) => !CAMPUS_ORDER.includes(c))];
+    return order.filter((c) => map[c]).map((c) => ({ campus: c, ...map[c] }));
+  }, [results, roster]);
+
+  const handleImport = (rows, label, filename) => {
+    const byLoc = {}; const bySeq = {};
+    roster.forEach((p) => { byLoc[normKey(p.loc)] = p; bySeq[String(p.seq)] = p; });
+    const next = { ...results };
+    let merged = 0, updated = 0, skipped = 0, unmatched = 0;
+    rows.forEach((row) => {
+      const lt = toISO(row["Last Tested"]);
+      const hasResult = lt || ["Button/Dialing", "Mic", "Speaker", "Lights"].some((k) => (row[k] || "").trim());
+      if (!hasResult) { skipped++; return; }
+      let phone = byLoc[normKey(row["Location Description"])];
+      if (!phone && row["Seq"]) phone = bySeq[String(parseInt(row["Seq"], 10))];
+      if (!phone) { unmatched++; return; }
+      const rec = {
+        lastTested: lt, button: (row["Button/Dialing"] || "").trim() || null, mic: (row["Mic"] || "").trim() || null,
+        speaker: (row["Speaker"] || "").trim() || null, lights: (row["Lights"] || "").trim() || null,
+        notes: (row["Testing Notes"] || "").trim(), source: label || filename,
+      };
+      const ex = next[phone.id];
+      if (ex) { if ((ex.lastTested || "") <= (rec.lastTested || "")) { next[phone.id] = rec; updated++; } }
+      else { next[phone.id] = rec; merged++; }
+    });
+    const entry = { id: Date.now() + Math.random(), label: label || filename, filename, date: todayISO(), merged, updated, skipped, unmatched, count: rows.length };
+    const nextLog = [entry, ...log].slice(0, 50);
+    commitResults(next, nextLog);
+    return entry;
+  };
+
+  if (!loaded) return <div style={{ ...page, alignItems: "center", justifyContent: "center" }}><span style={{ color: "#fff" }}>Loading…</span></div>;
+
+  return (
+    <div style={page}>
+      <header style={{ background: NAVY, color: "#fff", padding: "16px 22px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ background: "#fff", borderRadius: 9, padding: "9px 13px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <UMLLogo variant="mark" height={28} />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1 }}>Emergency Phone Testing</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, letterSpacing: 1.5, color: GOLD, fontWeight: 700, marginTop: 3 }}>ADMIN CONSOLE · UCAPS</div>
+        </div>
+      </header>
+
+      <nav style={{ background: NAVY_DARK, display: "flex", padding: "0 12px", gap: 2, flexWrap: "wrap" }}>
+        {[["dashboard", "Dashboard"], ["roster", "Roster"], ["attention", `Needs Attention${stats.fail ? ` (${stats.fail})` : ""}`], ["overdue", "Overdue"], ["import", "Import"]].map(([k, lab]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            background: tab === k ? "#f4f6f8" : "transparent", color: tab === k ? NAVY : "rgba(255,255,255,.8)",
+            border: "none", borderRadius: tab === k ? "8px 8px 0 0" : 0, padding: "12px 18px", cursor: "pointer",
+            fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 14, marginTop: 6,
+          }}>{lab}</button>
+        ))}
+      </nav>
+
+      <main style={{ flex: 1, overflowY: "auto", background: "#f4f6f8", padding: 22 }}>
+        {tab === "dashboard" && <Dashboard stats={stats} byCampus={byCampus} log={log} onExport={() => exportResults(results, roster)} />}
+        {tab === "roster" && <Roster roster={roster} results={results} isCustom={isCustom} onEdit={(p) => setEditing(p)} onAdd={() => setEditing(null)} onExportRoster={() => exportRoster(roster)} />}
+        {tab === "attention" && <Attention roster={roster} results={results} />}
+        {tab === "overdue" && <Overdue roster={roster} results={results} />}
+        {tab === "import" && <Import onImport={handleImport} log={log} onClear={() => commitResults({}, [])} />}
+      </main>
+
+      {editing !== undefined && (
+        <PhoneForm phone={editing} isCustom={editing ? isCustom(editing.id) : false}
+          onSave={upsertPhone} onDelete={deletePhone} onClose={() => setEditing(undefined)} />
+      )}
+    </div>
+  );
+}
+
+function buildCSV(headers, rowFn, roster) {
+  const lines = [headers.join(",")];
+  roster.forEach((p) => {
+    lines.push(rowFn(p).map((v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(","));
+  });
+  return lines.join("\n");
+}
+function downloadCSV(csv, name) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function exportResults(results, roster) {
+  const csv = buildCSV(["Seq", "Location Description", "Campus", "Building", "Interior/Exterior", "Extension", "Brand", "Last Tested", "Button/Dialing", "Mic", "Speaker", "Lights", "Status", "Testing Notes", "Source"],
+    (p) => { const r = results[p.id] || {}; return [p.seq, p.loc, p.campus, p.building, p.intext, p.ext, p.brand, r.lastTested ? fmtDate(r.lastTested) : "", r.button || "", r.mic || "", r.speaker || "", r.lights || "", STATUS_META[statusOf(r)].label, r.notes || "", r.source || ""]; }, roster);
+  downloadCSV(csv, `Emergency_Phone_Master_${todayISO()}.csv`);
+}
+function exportRoster(roster) {
+  const csv = buildCSV(["Campus", "Building ID", "Building Floor", "Interior_Exterior", "Location Description", "Brand", "Model Number", "Extension1", "Connectivity", "Mount", "Number of Buttons", "Number of Cameras", "Amplified Speakers", "Testing Order", "Notes"],
+    (p) => [p.campus, p.building, p.floor, p.intext, p.loc, p.brand, p.model, p.ext, p.conn, p.mount, p.buttons, p.cameras, p.speakers, p.order, p.notes], roster);
+  downloadCSV(csv, `Emergency_Phone_Roster_${todayISO()}.csv`);
+}
+
+function Dashboard({ stats, byCampus, log, onExport }) {
+  const pct = stats.total ? Math.round((stats.tested / stats.total) * 100) : 0;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <h2 style={h2}>Overview</h2>
+        <button onClick={onExport} style={primaryBtn}>↧ Export Master CSV</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14, marginBottom: 22 }}>
+        <Stat n={`${pct}%`} label="Complete" color={NAVY} />
+        <Stat n={`${stats.tested}/${stats.total}`} label="Tested" color={NAVY} />
+        <Stat n={stats.remaining} label="Remaining" color="#5b6670" />
+        <Stat n={stats.pass} label="Passing" color="#1a7d3c" />
+        <Stat n={stats.fail} label="Needs Attention" color="#c0392b" />
+      </div>
+      <div style={card}>
+        <h3 style={h3}>Progress by campus</h3>
+        {byCampus.map((c) => {
+          const p = c.total ? Math.round((c.tested / c.total) * 100) : 0;
+          return (
+            <div key={c.campus} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, marginBottom: 5 }}>
+                <span style={{ fontWeight: 700, color: "#2c333a" }}>{c.campus}{c.fail > 0 && <span style={{ color: "#c0392b", fontWeight: 600 }}>  ·  {c.fail} need attention</span>}</span>
+                <span style={{ color: "#7a838c", fontWeight: 600 }}>{c.tested}/{c.total}</span>
+              </div>
+              <div style={{ height: 10, background: "#e2e6ea", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ width: `${p}%`, height: "100%", background: c.fail > 0 ? "linear-gradient(90deg,#c0392b,#e05a4a)" : `linear-gradient(90deg,${GOLD},#ffcb47)` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ ...card, marginTop: 16 }}>
+        <h3 style={h3}>Recent imports</h3>
+        {log.length === 0 && <p style={muted}>No imports yet. Go to the Import tab to load tester CSV exports.</p>}
+        {log.slice(0, 6).map((e) => (
+          <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #eceff1", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5 }}>
+            <span style={{ fontWeight: 600, color: "#2c333a" }}>{e.label}</span>
+            <span style={{ color: "#7a838c" }}>{e.merged + e.updated} results · {e.date}{e.unmatched ? ` · ${e.unmatched} unmatched` : ""}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Roster({ roster, results, isCustom, onEdit, onAdd, onExportRoster }) {
+  const [search, setSearch] = useState("");
+  const [campus, setCampus] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const campuses = ["All", ...CAMPUS_ORDER.filter((c) => roster.some((p) => p.campus === c))];
+  const list = useMemo(() => roster.filter((p) => {
+    if (campus !== "All" && p.campus !== campus) return false;
+    const s = statusOf(results[p.id]);
+    if (statusFilter !== "all" && s !== statusFilter) return false;
+    if (search.trim()) { const q = search.toLowerCase(); if (!`${p.loc} ${p.building} ${p.ext} ${p.campus}`.toLowerCase().includes(q)) return false; }
+    return true;
+  }), [search, campus, statusFilter, roster, results]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <h2 style={h2}>Roster <span style={{ color: "#9aa3ad", fontWeight: 600, fontSize: 15 }}>({list.length})</span></h2>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onExportRoster} style={secondaryBtn}>↧ Export Roster</button>
+          <button onClick={onAdd} style={primaryBtn}>+ Add Phone</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, margin: "14px 0 16px", flexWrap: "wrap" }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" style={{ ...input, flex: 1, minWidth: 180 }} />
+        <select value={campus} onChange={(e) => setCampus(e.target.value)} style={select}>{campuses.map((c) => <option key={c}>{c}</option>)}</select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={select}>
+          <option value="all">All statuses</option><option value="untested">Not tested</option><option value="fail">Needs attention</option><option value="pass">Pass</option>
+        </select>
+      </div>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        {list.map((p, i) => {
+          const r = results[p.id]; const s = statusOf(r); const m = STATUS_META[s];
+          return (
+            <div key={p.id} onClick={() => onEdit(p)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < list.length - 1 ? "1px solid #eceff1" : "none", cursor: "pointer" }}>
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, color: NAVY, fontSize: 12.5, width: 38 }}>{String(p.seq).padStart(4, "0")}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 600, fontSize: 14.5, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.loc}{isCustom(p.id) && <span style={{ fontSize: 10.5, fontWeight: 700, color: GOLD, background: NAVY, padding: "1px 6px", borderRadius: 5, marginLeft: 8, verticalAlign: "middle" }}>ADDED</span>}
+                </div>
+                <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{p.campus}{p.building ? " · " + p.building : ""}{p.ext ? " · " + p.ext : ""}</div>
+              </div>
+              {r?.lastTested && <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{fmtDate(r.lastTested)}</span>}
+              <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, fontWeight: 700, color: m.color, background: m.bg, padding: "3px 10px", borderRadius: 99, whiteSpace: "nowrap" }}>{m.label}</span>
+              <span style={{ color: "#c2c9cf", fontSize: 16 }}>✎</span>
+            </div>
+          );
+        })}
+        {list.length === 0 && <p style={{ ...muted, padding: 24 }}>No phones match.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Attention({ roster, results }) {
+  const failing = roster.filter((p) => statusOf(results[p.id]) === "fail").sort((a, b) => String(a.campus).localeCompare(String(b.campus)) || a.seq - b.seq);
+  return (
+    <div>
+      <h2 style={h2}>Needs Attention <span style={{ color: "#c0392b", fontWeight: 800, fontSize: 18 }}>({failing.length})</span></h2>
+      <p style={muted}>Phones with a failed component or missing light, from the consolidated results.</p>
+      <div style={{ marginTop: 14 }}>
+        {failing.length === 0 && <div style={card}><p style={muted}>Nothing flagged.</p></div>}
+        {failing.map((p) => {
+          const r = results[p.id]; const issues = [];
+          if (r.button === "Not Working") issues.push("Button/Dialing");
+          if (r.mic === "Not Working") issues.push("Mic");
+          if (r.speaker === "Not Working") issues.push("Speaker");
+          if (r.lights === "No") issues.push("Blue light");
+          return (
+            <div key={p.id} style={{ background: "#fff", borderLeft: "4px solid #c0392b", borderRadius: 8, padding: "13px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,.05)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 15, color: "#222" }}>{String(p.seq).padStart(4, "0")} · {p.loc}</span>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, color: "#9aa3ad", whiteSpace: "nowrap" }}>{p.campus} · {fmtDate(r.lastTested)}</span>
+              </div>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13, color: "#c0392b", fontWeight: 600, marginTop: 4 }}>{issues.join(", ")}</div>
+              {r.notes && <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13, color: "#6b747d", marginTop: 4 }}>{r.notes}</div>}
+              {p.ext && <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, color: "#9aa3ad", marginTop: 4 }}>Dial/Ext {p.ext}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Overdue({ roster, results }) {
+  const [thresh, setThresh] = useState(90);
+  const [includeNever, setIncludeNever] = useState(true);
+  const list = useMemo(() => {
+    return roster.map((p) => ({ p, d: daysSince(results[p.id]?.lastTested) }))
+      .filter(({ d }) => (d === Infinity ? includeNever : d >= thresh))
+      .sort((a, b) => b.d - a.d);
+  }, [roster, results, thresh, includeNever]);
+
+  return (
+    <div>
+      <h2 style={h2}>Overdue <span style={{ color: "#9aa3ad", fontWeight: 600, fontSize: 15 }}>({list.length})</span></h2>
+      <p style={muted}>Phones last tested longer ago than the threshold. Use this to catch anything slipping through a cycle.</p>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", margin: "14px 0 16px", flexWrap: "wrap" }}>
+        <label style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 700, color: NAVY }}>Older than</label>
+        <select value={thresh} onChange={(e) => setThresh(Number(e.target.value))} style={select}>
+          {[30, 60, 90, 120, 180, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
+        </select>
+        <label style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, color: "#2c333a", display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
+          <input type="checkbox" checked={includeNever} onChange={(e) => setIncludeNever(e.target.checked)} /> Include never-tested
+        </label>
+      </div>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        {list.map(({ p, d }, i) => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < list.length - 1 ? "1px solid #eceff1" : "none" }}>
+            <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, color: NAVY, fontSize: 12.5, width: 38 }}>{String(p.seq).padStart(4, "0")}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 600, fontSize: 14.5, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.loc}</div>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{p.campus}{p.building ? " · " + p.building : ""}</div>
+            </div>
+            <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, fontWeight: 700, color: d === Infinity ? "#9aa3ad" : "#c0392b", whiteSpace: "nowrap" }}>
+              {d === Infinity ? "Never tested" : `${d} days ago`}
+            </span>
+          </div>
+        ))}
+        {list.length === 0 && <p style={{ ...muted, padding: 24 }}>Nothing overdue at this threshold.</p>}
+      </div>
+    </div>
+  );
+}
+
+const FIELDS = [
+  ["loc", "Location Description", "text", true], ["campus", "Campus", "campus", false], ["building", "Building", "text", false],
+  ["floor", "Floor", "text", false], ["intext", "Interior / Exterior", "intext", false], ["order", "Testing Order", "number", false],
+  ["ext", "Extension / Dial", "text", false], ["brand", "Brand", "text", false], ["model", "Model", "text", false],
+  ["conn", "Connectivity", "text", false], ["mount", "Mount", "text", false], ["buttons", "# Buttons", "text", false],
+  ["cameras", "# Cameras", "text", false],
+  ["speakers", "Amplified Speakers", "text", false], ["notes", "Install Note", "textarea", false],
+];
+
+function PhoneForm({ phone, isCustom, onSave, onDelete, onClose }) {
+  const init = {}; FIELDS.forEach(([k]) => { init[k] = phone ? (phone[k] ?? "") : ""; });
+  const [form, setForm] = useState(init);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const valid = String(form.loc).trim().length > 0;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,20,45,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 640, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.4)" }}>
+        <div style={{ background: NAVY, color: "#fff", padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18 }}>{phone ? "Edit phone" : "Add phone"}</span>
+          <button onClick={onClose} style={{ ...iconBtn }}>✕</button>
+        </div>
+        <div style={{ padding: 22, overflowY: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {FIELDS.map(([k, label, type, req]) => (
+              <div key={k} style={{ gridColumn: (type === "textarea" || k === "loc") ? "1 / -1" : "auto" }}>
+                <label style={fieldLabel}>{label}{req && <span style={{ color: "#c0392b" }}> *</span>}</label>
+                {type === "textarea" ? (
+                  <textarea value={form[k]} onChange={(e) => set(k, e.target.value)} rows={2} style={{ ...input, width: "100%", boxSizing: "border-box", resize: "vertical" }} />
+                ) : type === "campus" ? (
+                  <select value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...select, width: "100%" }}>
+                    <option value="">—</option>{CAMPUS_ORDER.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                ) : type === "intext" ? (
+                  <select value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...select, width: "100%" }}>
+                    <option value="">—</option><option>Interior</option><option>Exterior</option>
+                  </select>
+                ) : (
+                  <input type={type === "number" ? "number" : "text"} value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...input, width: "100%", boxSizing: "border-box" }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ borderTop: "1px solid #e8ebee", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            {phone && !confirmDel && <button onClick={() => setConfirmDel(true)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "11px 16px" }}>Delete</button>}
+            {phone && confirmDel && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#c0392b", fontWeight: 600 }}>Remove this phone?</span>
+                <button onClick={() => onDelete(phone.id)} style={{ ...primaryBtn, background: "#c0392b", padding: "9px 14px", fontSize: 13 }}>Yes, remove</button>
+                <button onClick={() => setConfirmDel(false)} style={{ ...secondaryBtn, padding: "9px 14px", fontSize: 13 }}>Cancel</button>
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={secondaryBtn}>Cancel</button>
+            <button disabled={!valid} onClick={() => onSave(form, phone ? phone.id : null)} style={{ ...primaryBtn, opacity: valid ? 1 : 0.45, cursor: valid ? "pointer" : "not-allowed" }}>{phone ? "Save changes" : "Add phone"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Import({ onImport, log, onClear }) {
+  const [label, setLabel] = useState("");
+  const [drag, setDrag] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const fileRef = useRef(null);
+
+  const processFiles = (files) => {
+    const arr = Array.from(files).filter((f) => /\.csv$/i.test(f.name));
+    if (!arr.length) { setToast({ err: true, msg: "No CSV files found." }); return; }
+    let done = 0; const summaries = [];
+    arr.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const parsed = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+        summaries.push(onImport(parsed.data, label.trim(), file.name));
+        done++;
+        if (done === arr.length) {
+          const tot = summaries.reduce((a, s) => ({ m: a.m + s.merged + s.updated, u: a.u + s.unmatched }), { m: 0, u: 0 });
+          setToast({ err: false, msg: `Imported ${tot.m} result${tot.m === 1 ? "" : "s"} from ${arr.length} file${arr.length === 1 ? "" : "s"}${tot.u ? ` · ${tot.u} unmatched row${tot.u === 1 ? "" : "s"}` : ""}.` });
+          setLabel("");
+        }
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <h2 style={h2}>Import tester results</h2>
+      <p style={muted}>Load the CSV files testers export from the field app. Results merge into the consolidated set — when the same phone appears twice, the most recent test wins.</p>
+      <div style={{ ...card, marginTop: 16 }}>
+        <label style={fieldLabel}>Source label <span style={{ color: "#9aa3ad", fontWeight: 400 }}>(optional — e.g. tester name or campus)</span></label>
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. East Campus — Mike" style={{ ...input, width: "100%", boxSizing: "border-box", marginBottom: 16 }} />
+        <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); processFiles(e.dataTransfer.files); }}
+          onClick={() => fileRef.current?.click()}
+          style={{ border: `2px dashed ${drag ? NAVY : "#cdd4da"}`, background: drag ? "#eef4fb" : "#fafbfc", borderRadius: 14, padding: "34px 20px", textAlign: "center", cursor: "pointer" }}>
+          <div style={{ fontSize: 32, color: NAVY }}>↥</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 700, color: NAVY, fontSize: 15, marginTop: 6 }}>Drop CSV files here or click to browse</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#9aa3ad", marginTop: 4 }}>You can select multiple files at once</div>
+          <input ref={fileRef} type="file" accept=".csv" multiple style={{ display: "none" }} onChange={(e) => processFiles(e.target.files)} />
+        </div>
+        {toast && <div style={{ marginTop: 14, padding: "11px 14px", borderRadius: 10, fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 600, background: toast.err ? "#fbe6e3" : "#e3f4e8", color: toast.err ? "#c0392b" : "#1a7d3c" }}>{toast.msg}</div>}
+      </div>
+      {log.length > 0 && (
+        <div style={{ ...card, marginTop: 16 }}>
+          <h3 style={h3}>Import history</h3>
+          {log.map((e) => (
+            <div key={e.id} style={{ padding: "9px 0", borderBottom: "1px solid #eceff1", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontWeight: 700, color: "#2c333a" }}>{e.label}</span><span style={{ color: "#9aa3ad" }}>{e.date}</span></div>
+              <div style={{ color: "#7a838c", fontSize: 12.5, marginTop: 2 }}>{e.merged} new · {e.updated} updated · {e.skipped} untested skipped{e.unmatched ? ` · ${e.unmatched} unmatched` : ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: 20 }}>
+        {!confirmClear ? (
+          <button onClick={() => setConfirmClear(true)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "11px 18px" }}>Clear consolidated results</button>
+        ) : (
+          <div style={{ ...card, borderLeft: "4px solid #c0392b" }}>
+            <p style={{ ...muted, marginTop: 0 }}>This wipes imported/merged test results on this device (your roster edits stay). Export the master CSV first if you need it.</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmClear(false)} style={secondaryBtn}>Cancel</button>
+              <button onClick={() => { onClear(); setConfirmClear(false); setToast(null); }} style={{ ...primaryBtn, background: "#c0392b" }}>Clear results</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UMLLogo({ variant = "mark", height = 36 }) {
+  if (variant === "full") {
+    const st = { height, width: Math.round(height * 311 / 393), display: "block", flexShrink: 0 };
+    return (
+      <svg viewBox="0 0 311 393" fill="none" style={st} preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.8564 233.134C13.8564 186.343 137.109 94.7154 137.109 64.8359C137.109 54.7629 125.145 51.8364 112.776 51.8364C86.8413 51.8364 14.6487 83.0256 14.6487 129.171C14.6487 146.067 25.417 155.493 45.757 160.036C30.3807 168.476 8.5855 163.432 -0.0161743 148.864V255.366H27.438C19.2729 250.661 13.8403 241.833 13.8403 233.151L13.8564 233.134Z" fill="black"/>
+      <path d="M122.752 44.6899C137.028 44.6899 147.942 47.7457 155.202 52.2406L109.671 0H0V121.296C11.5767 94.0848 50.7854 44.6899 122.752 44.6899Z" fill="black"/>
+      <path d="M62.8633 255.35H114.425V226.02C97.6581 239.23 80.0343 250.079 62.8633 255.35Z" fill="black"/>
+      <path d="M277.711 72.2249C252.294 99.8408 186.132 204.532 186.132 238.987C186.132 247.767 192.519 252.31 202.091 252.31C220.846 252.31 245.568 223.724 245.568 190.579C252.359 195.445 255.544 202.608 255.544 209.755C255.544 228.365 241.089 246.813 221.849 255.382H310.679V0H201.007L155.218 52.2406C163.335 57.4954 166.601 64.464 166.601 70.3494C166.601 103.479 40.9549 209.415 40.9549 238.648C40.9549 245.148 44.1401 246.441 51.319 246.441C109.154 246.441 210.078 109.865 239.974 72.1764L277.727 72.2249H277.711Z" fill="#1257D1"/>
+      <path d="M0.129303 301.964C0.129303 322.094 10.2023 328.998 28.3111 328.998C47.7295 328.998 56.412 320.8 56.412 302.045V268.996H37.2523V304.001C37.2523 310.339 35.2151 314.721 28.3111 314.721C20.437 314.721 19.3052 309.773 19.3052 304.001V268.996H0.129303V301.964Z" fill="black"/>
+      <path d="M83.559 327.462V307.639L83.1548 298.552L82.3464 289.951H82.5081L93.147 327.462H106.47L117.109 289.951H117.27L116.284 300.493L116.042 309.596V327.462H133.261V268.996H110.124L99.8084 305.456L89.4929 268.996H66.3557V327.462H83.559Z" fill="black"/>
+      <path d="M178.113 268.996H158.613L137.659 327.462H156.415L158.597 319.749H177.676L179.94 327.462H199.035L178.08 268.996H178.113ZM162.284 307.558L168.218 286.604L174.394 307.558H162.3H162.284Z" fill="black"/>
+      <path d="M251.583 285.957C250.208 275.722 242.819 267.444 226.57 267.444C211.953 267.444 201.234 273.701 201.234 286.119C201.234 308.448 234.848 302.352 234.848 311.212C234.848 313.977 231.679 315.513 226.893 315.513C225.018 315.513 222.997 315.028 221.444 314.058C219.811 313.088 218.68 311.536 218.275 309.434H199.924C200.328 319.976 210.401 328.998 225.826 328.998C241.251 328.998 253.183 322.417 253.183 308.852C253.183 287.574 219.569 293.023 219.569 284.259C219.569 282.141 221.428 280.929 225.664 280.929C227.524 280.929 229.238 281.252 230.612 281.98C231.986 282.707 233.053 283.936 233.377 285.957H251.566H251.583Z" fill="black"/>
+      <path d="M309.127 285.957C307.736 275.722 300.363 267.444 284.114 267.444C269.497 267.444 258.778 273.701 258.778 286.119C258.778 308.448 292.392 302.352 292.392 311.212C292.392 313.977 289.223 315.513 284.437 315.513C282.562 315.513 280.541 315.028 278.988 314.058C277.371 313.088 276.223 311.536 275.819 309.434H257.468C257.872 319.976 267.945 328.998 283.37 328.998C298.795 328.998 310.743 322.417 310.743 308.852C310.743 287.574 277.129 293.023 277.129 284.259C277.129 282.141 278.988 280.929 283.224 280.929C285.084 280.929 286.798 281.252 288.172 281.98C289.563 282.707 290.614 283.936 290.937 285.957H309.127Z" fill="black"/>
+      <path d="M0 340.073H16.5566V378.134H40.3405V391.263H0V340.073Z" fill="#1257D1"/>
+      <path d="M67.6492 338.844C83.9794 338.844 94.8932 350.033 94.8932 365.652C94.8932 381.271 83.9794 392.459 67.6492 392.459C51.319 392.459 40.4052 381.271 40.4052 365.652C40.4052 350.033 51.319 338.844 67.6492 338.844ZM67.6492 379.719C71.8692 379.719 78.3366 377.067 78.3366 365.668C78.3366 354.269 71.8692 351.618 67.6492 351.618C63.4292 351.618 56.9618 354.269 56.9618 365.668C56.9618 377.067 63.4292 379.719 67.6492 379.719Z" fill="#1257D1"/>
+      <path d="M152.017 391.247H135.913L130.124 360.058H129.979L124.336 391.247H108.151L93.5512 340.057H109.801L116.349 371.667H116.494L122.962 340.057H137.562L143.884 372.103H144.029L150.723 340.057H167.053L152.001 391.247H152.017Z" fill="#1257D1"/>
+      <path d="M171.904 340.073H216.384V353.186H188.461V359.573H213.829V371.764H188.461V378.15H217.208V391.279H171.904V340.089V340.073Z" fill="#1257D1"/>
+      <path d="M224.064 340.073H240.62V378.134H264.404V391.263H224.064V340.073Z" fill="#1257D1"/>
+      <path d="M270.128 340.073H286.685V378.134H310.469V391.263H270.128V340.073Z" fill="#1257D1"/>
+      </svg>
+    );
+  }
+  const st = { height, width: Math.round(height * 331 / 276), display: "block", flexShrink: 0 };
+  return (
+    <svg viewBox="-10 -10 331 276" fill="none" style={st} preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.8564 233.134C13.8564 186.343 137.109 94.7154 137.109 64.8359C137.109 54.7629 125.145 51.8364 112.776 51.8364C86.8413 51.8364 14.6487 83.0256 14.6487 129.171C14.6487 146.067 25.417 155.493 45.757 160.036C30.3807 168.476 8.5855 163.432 -0.0161743 148.864V255.366H27.438C19.2729 250.661 13.8403 241.833 13.8403 233.151L13.8564 233.134Z" fill="black"/>
+      <path d="M122.752 44.6899C137.028 44.6899 147.942 47.7457 155.202 52.2406L109.671 0H0V121.296C11.5767 94.0848 50.7854 44.6899 122.752 44.6899Z" fill="black"/>
+      <path d="M62.8633 255.35H114.425V226.02C97.6581 239.23 80.0343 250.079 62.8633 255.35Z" fill="black"/>
+      <path d="M277.711 72.2249C252.294 99.8408 186.132 204.532 186.132 238.987C186.132 247.767 192.519 252.31 202.091 252.31C220.846 252.31 245.568 223.724 245.568 190.579C252.359 195.445 255.544 202.608 255.544 209.755C255.544 228.365 241.089 246.813 221.849 255.382H310.679V0H201.007L155.218 52.2406C163.335 57.4954 166.601 64.464 166.601 70.3494C166.601 103.479 40.9549 209.415 40.9549 238.648C40.9549 245.148 44.1401 246.441 51.319 246.441C109.154 246.441 210.078 109.865 239.974 72.1764L277.727 72.2249H277.711Z" fill="#1257D1"/>
+    </svg>
+  );
+}
+
+function Stat({ n, label, color }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
+      <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 30, color, lineHeight: 1 }}>{n}</div>
+      <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#7a838c", marginTop: 5, fontWeight: 600 }}>{label}</div>
+    </div>
+  );
+}
+
+const page = { minHeight: "100vh", width: "100%", display: "flex", flexDirection: "column", background: "#f4f6f8", fontFamily: "'Public Sans',sans-serif" };
+const h2 = { fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 24, color: NAVY, margin: 0 };
+const h3 = { fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 16, color: NAVY, margin: "0 0 14px" };
+const card = { background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,.06)" };
+const muted = { fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, color: "#7a838c", lineHeight: 1.5, margin: "6px 0 0" };
+const primaryBtn = { background: NAVY, color: "#fff", border: "none", borderRadius: 12, padding: "12px 20px", fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: "pointer" };
+const secondaryBtn = { background: "#eef0f2", color: NAVY, border: "none", borderRadius: 12, padding: "12px 20px", fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: "pointer" };
+const ghostBtn = { background: "transparent", color: NAVY, border: "1.5px solid #cdd4da", borderRadius: 12, fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const input = { padding: "11px 14px", borderRadius: 11, border: "1.5px solid #d8dde2", fontFamily: "'Public Sans',sans-serif", fontSize: 14.5, outline: "none" };
+const select = { padding: "11px 12px", borderRadius: 11, border: "1.5px solid #d8dde2", fontFamily: "'Public Sans',sans-serif", fontSize: 14, fontWeight: 600, color: NAVY, background: "#fff", cursor: "pointer" };
+const fieldLabel = { display: "block", fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 13, color: NAVY, marginBottom: 6 };
+const iconBtn = { width: 32, height: 32, borderRadius: 8, border: "none", background: "rgba(255,255,255,.18)", color: "#fff", fontSize: 16, cursor: "pointer" };
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
