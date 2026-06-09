@@ -1,0 +1,651 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS Emergency Phone — Admin Console</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="../ucaps_shared.js"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Public Sans',-apple-system,sans-serif;background:#f4f6f8;min-height:100vh}
+  #root{min-height:100vh}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+  // Password gate (from ucaps_shared.js)
+  if (typeof ucapsGate === "function") ucapsGate();
+
+  // ── window.storage shim → Supabase ──────────────────────────────
+  // The app was written for the Claude artifact storage API. We redirect
+  // those same calls to the shared Supabase db so data syncs across devices.
+  window.storage = {
+    async get(key) {
+      try {
+        const val = await db.get(key);
+        return val != null ? { value: typeof val === "string" ? val : JSON.stringify(val) } : null;
+      } catch (e) { return null; }
+    },
+    async set(key, value) {
+      try {
+        // value comes in already JSON-stringified from the app
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        await db.set(key, parsed);
+      } catch (e) {
+        await db.set(key, value);
+      }
+    }
+  };
+</script>
+
+<script type="text/babel" data-presets="react,typescript" data-type="module">
+const { useState, useEffect, useMemo, useRef, useCallback, Fragment } = React;
+const Papa = window.Papa;
+
+
+
+const BASE_PHONES = [];
+
+const NAVY = "#003e7e";
+const NAVY_DARK = "#002a57";
+const GOLD = "#fdb515";
+const CAMPUS_ORDER = ["East", "North", "South", "ICC", "Off Campus", "Other"];
+
+const KEY = "ucaps_ep_admin_v1";        // admin-only: log + roster overlay
+const RESULTS_KEY = "ucaps_ep_results_v1"; // SHARED with the field testing app
+async function loadState() {
+  try {
+    // results come from the shared key (written by the testing app + admin)
+    let results = {};
+    try { const rr = await window.storage.get(RESULTS_KEY); if (rr && rr.value) results = JSON.parse(rr.value); } catch (e) {}
+    // log + roster overlay live in the admin-only key
+    let admin = {};
+    try { const ar = await window.storage.get(KEY); if (ar && ar.value) admin = JSON.parse(ar.value); } catch (e) {}
+    return { results, log: admin.log || [], roster: admin.roster || { overrides: {}, added: [], deleted: [] } };
+  } catch (e) { return {}; }
+}
+async function saveResultsShared(results) {
+  try { await window.storage.set(RESULTS_KEY, JSON.stringify(results || {})); } catch (e) {}
+}
+async function saveAdmin(log, roster) {
+  try { await window.storage.set(KEY, JSON.stringify({ log: log || [], roster: roster || { overrides: {}, added: [], deleted: [] } })); } catch (e) {}
+}
+
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const fmtDate = (iso) => { if (!iso) return ""; const [y, m, d] = iso.split("-"); return `${m}/${d}/${y}`; };
+function toISO(s) {
+  if (!s) return "";
+  s = String(s).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+  const d = new Date(s); return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+}
+const daysSince = (iso) => { if (!iso) return Infinity; return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000); };
+
+function statusOf(rec) {
+  if (!rec || !rec.lastTested) return "untested";
+  const core = [rec.button, rec.mic, rec.speaker];
+  const anyFail = core.some((v) => v === "Not Working") || rec.lights === "No";
+  return anyFail ? "fail" : "pass";
+}
+const STATUS_META = {
+  untested: { label: "Not Tested", color: "#9aa3ad", bg: "#eef0f2" },
+  pass: { label: "Pass", color: "#1a7d3c", bg: "#e3f4e8" },
+  fail: { label: "Needs Attention", color: "#c0392b", bg: "#fbe6e3" },
+};
+const normKey = (s) => String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [results, setResults] = useState({});
+  const [log, setLog] = useState([]);
+  const [overlay, setOverlay] = useState({ overrides: {}, added: [], deleted: [] });
+  const [loaded, setLoaded] = useState(false);
+  const [editing, setEditing] = useState(undefined); // undefined=closed, null=new, {phone}=edit
+
+  useEffect(() => {
+    document.title = "UCAPS Emergency Phone Testing — Admin";
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap";
+    document.head.appendChild(link);
+    (async () => {
+      const s = await loadState();
+      setResults(s.results || {});
+      setLog(s.log || []);
+      setOverlay(s.roster || { overrides: {}, added: [], deleted: [] });
+      setLoaded(true);
+    })();
+    // Live refresh: pull shared field-test results periodically so the dashboard
+    // reflects tests logged on other devices without a manual reload.
+    const iv = setInterval(async () => {
+      try {
+        if (typeof db === "undefined") return;
+        const remote = await db.get("ucaps_ep_results_v1");
+        if (remote) setResults(remote);
+      } catch (e) {}
+    }, 20000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const commitResults = (r, l) => { setResults(r); setLog(l); saveResultsShared(r); saveAdmin(l, overlay); };
+  const commitOverlay = (o) => { setOverlay(o); saveAdmin(log, o); };
+
+  // effective roster = base (minus deleted, plus overrides) + custom additions, re-sorted & re-sequenced
+  const roster = useMemo(() => {
+    const del = new Set(overlay.deleted || []);
+    const base = BASE_PHONES.filter((p) => !del.has(p.id)).map((p) => ({ ...p, ...(overlay.overrides[p.id] || {}) }));
+    const customs = (overlay.added || []).filter((p) => !del.has(p.id));
+    let all = [...base, ...customs].map((p) => ({ ...p, _ord: (p.order === "" || p.order == null) ? 999999 : (Number(p.order) || 999999) }));
+    all.sort((a, b) => a._ord - b._ord || String(a.loc).localeCompare(String(b.loc)));
+    all.forEach((p, i) => { p.seq = i + 1; });
+    return all;
+  }, [overlay]);
+
+  const isCustom = (id) => (overlay.added || []).some((p) => p.id === id);
+
+  const upsertPhone = (form, editId) => {
+    if (editId) {
+      if (isCustom(editId)) commitOverlay({ ...overlay, added: overlay.added.map((p) => p.id === editId ? { ...p, ...form, id: editId } : p) });
+      else commitOverlay({ ...overlay, overrides: { ...overlay.overrides, [editId]: { ...form } } });
+    } else {
+      const id = "cust_" + Date.now();
+      commitOverlay({ ...overlay, added: [...(overlay.added || []), { ...form, id }] });
+    }
+    setEditing(undefined);
+  };
+  const deletePhone = (id) => {
+    commitOverlay({ ...overlay, deleted: [...(overlay.deleted || []), id], added: (overlay.added || []).filter((p) => p.id !== id) });
+    setEditing(undefined);
+  };
+
+  const stats = useMemo(() => {
+    let tested = 0, pass = 0, fail = 0;
+    roster.forEach((p) => { const s = statusOf(results[p.id]); if (s !== "untested") tested++; if (s === "pass") pass++; if (s === "fail") fail++; });
+    return { total: roster.length, tested, pass, fail, remaining: roster.length - tested };
+  }, [results, roster]);
+
+  const byCampus = useMemo(() => {
+    const map = {};
+    roster.forEach((p) => {
+      const c = p.campus || "Other";
+      if (!map[c]) map[c] = { total: 0, tested: 0, fail: 0 };
+      map[c].total++;
+      const s = statusOf(results[p.id]);
+      if (s !== "untested") map[c].tested++;
+      if (s === "fail") map[c].fail++;
+    });
+    const order = [...CAMPUS_ORDER, ...Object.keys(map).filter((c) => !CAMPUS_ORDER.includes(c))];
+    return order.filter((c) => map[c]).map((c) => ({ campus: c, ...map[c] }));
+  }, [results, roster]);
+
+  const handleImport = (rows, label, filename) => {
+    const byLoc = {}; const bySeq = {};
+    roster.forEach((p) => { byLoc[normKey(p.loc)] = p; bySeq[String(p.seq)] = p; });
+    const next = { ...results };
+    let merged = 0, updated = 0, skipped = 0, unmatched = 0;
+    rows.forEach((row) => {
+      const lt = toISO(row["Last Tested"]);
+      const hasResult = lt || ["Button/Dialing", "Mic", "Speaker", "Lights"].some((k) => (row[k] || "").trim());
+      if (!hasResult) { skipped++; return; }
+      let phone = byLoc[normKey(row["Location Description"])];
+      if (!phone && row["Seq"]) phone = bySeq[String(parseInt(row["Seq"], 10))];
+      if (!phone) { unmatched++; return; }
+      const rec = {
+        lastTested: lt, button: (row["Button/Dialing"] || "").trim() || null, mic: (row["Mic"] || "").trim() || null,
+        speaker: (row["Speaker"] || "").trim() || null, lights: (row["Lights"] || "").trim() || null,
+        notes: (row["Testing Notes"] || "").trim(), source: label || filename,
+      };
+      const ex = next[phone.id];
+      if (ex) { if ((ex.lastTested || "") <= (rec.lastTested || "")) { next[phone.id] = rec; updated++; } }
+      else { next[phone.id] = rec; merged++; }
+    });
+    const entry = { id: Date.now() + Math.random(), label: label || filename, filename, date: todayISO(), merged, updated, skipped, unmatched, count: rows.length };
+    const nextLog = [entry, ...log].slice(0, 50);
+    commitResults(next, nextLog);
+    return entry;
+  };
+
+  if (!loaded) return <div style={{ ...page, alignItems: "center", justifyContent: "center" }}><span style={{ color: "#fff" }}>Loading…</span></div>;
+
+  return (
+    <div style={page}>
+      <header style={{ background: NAVY, color: "#fff", padding: "16px 22px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ background: "#fff", borderRadius: 9, padding: "9px 13px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <UMLLogo variant="mark" height={28} />
+        </div>
+        <div>
+          <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 19, lineHeight: 1 }}>Emergency Phone Testing</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, letterSpacing: 1.5, color: GOLD, fontWeight: 700, marginTop: 3 }}>ADMIN CONSOLE · UCAPS</div>
+        </div>
+      </header>
+
+      <nav style={{ background: NAVY_DARK, display: "flex", padding: "0 12px", gap: 2, flexWrap: "wrap" }}>
+        {[["dashboard", "Dashboard"], ["roster", "Roster"], ["attention", `Needs Attention${stats.fail ? ` (${stats.fail})` : ""}`], ["overdue", "Overdue"], ["import", "Import"]].map(([k, lab]) => (
+          <button key={k} onClick={() => setTab(k)} style={{
+            background: tab === k ? "#f4f6f8" : "transparent", color: tab === k ? NAVY : "rgba(255,255,255,.8)",
+            border: "none", borderRadius: tab === k ? "8px 8px 0 0" : 0, padding: "12px 18px", cursor: "pointer",
+            fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 14, marginTop: 6,
+          }}>{lab}</button>
+        ))}
+      </nav>
+
+      <main style={{ flex: 1, overflowY: "auto", background: "#f4f6f8", padding: 22 }}>
+        {tab === "dashboard" && <Dashboard stats={stats} byCampus={byCampus} log={log} onExport={() => exportResults(results, roster)} />}
+        {tab === "roster" && <Roster roster={roster} results={results} isCustom={isCustom} onEdit={(p) => setEditing(p)} onAdd={() => setEditing(null)} onExportRoster={() => exportRoster(roster)} />}
+        {tab === "attention" && <Attention roster={roster} results={results} />}
+        {tab === "overdue" && <Overdue roster={roster} results={results} />}
+        {tab === "import" && <Import onImport={handleImport} log={log} onClear={() => commitResults({}, [])} />}
+      </main>
+
+      {editing !== undefined && (
+        <PhoneForm phone={editing} isCustom={editing ? isCustom(editing.id) : false}
+          onSave={upsertPhone} onDelete={deletePhone} onClose={() => setEditing(undefined)} />
+      )}
+    </div>
+  );
+}
+
+function buildCSV(headers, rowFn, roster) {
+  const lines = [headers.join(",")];
+  roster.forEach((p) => {
+    lines.push(rowFn(p).map((v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(","));
+  });
+  return lines.join("\n");
+}
+function downloadCSV(csv, name) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+function exportResults(results, roster) {
+  const csv = buildCSV(["Seq", "Location Description", "Campus", "Building", "Interior/Exterior", "Extension", "Brand", "Last Tested", "Button/Dialing", "Mic", "Speaker", "Lights", "Status", "Testing Notes", "Source"],
+    (p) => { const r = results[p.id] || {}; return [p.seq, p.loc, p.campus, p.building, p.intext, p.ext, p.brand, r.lastTested ? fmtDate(r.lastTested) : "", r.button || "", r.mic || "", r.speaker || "", r.lights || "", STATUS_META[statusOf(r)].label, r.notes || "", r.source || ""]; }, roster);
+  downloadCSV(csv, `Emergency_Phone_Master_${todayISO()}.csv`);
+}
+function exportRoster(roster) {
+  const csv = buildCSV(["Campus", "Building ID", "Building Floor", "Interior_Exterior", "Location Description", "Brand", "Model Number", "Extension1", "Connectivity", "Mount", "Number of Buttons", "Number of Cameras", "Amplified Speakers", "Testing Order", "Notes"],
+    (p) => [p.campus, p.building, p.floor, p.intext, p.loc, p.brand, p.model, p.ext, p.conn, p.mount, p.buttons, p.cameras, p.speakers, p.order, p.notes], roster);
+  downloadCSV(csv, `Emergency_Phone_Roster_${todayISO()}.csv`);
+}
+
+function Dashboard({ stats, byCampus, log, onExport }) {
+  const pct = stats.total ? Math.round((stats.tested / stats.total) * 100) : 0;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <h2 style={h2}>Overview</h2>
+        <button onClick={onExport} style={primaryBtn}>↧ Export Master CSV</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 14, marginBottom: 22 }}>
+        <Stat n={`${pct}%`} label="Complete" color={NAVY} />
+        <Stat n={`${stats.tested}/${stats.total}`} label="Tested" color={NAVY} />
+        <Stat n={stats.remaining} label="Remaining" color="#5b6670" />
+        <Stat n={stats.pass} label="Passing" color="#1a7d3c" />
+        <Stat n={stats.fail} label="Needs Attention" color="#c0392b" />
+      </div>
+      <div style={card}>
+        <h3 style={h3}>Progress by campus</h3>
+        {byCampus.map((c) => {
+          const p = c.total ? Math.round((c.tested / c.total) * 100) : 0;
+          return (
+            <div key={c.campus} style={{ marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, marginBottom: 5 }}>
+                <span style={{ fontWeight: 700, color: "#2c333a" }}>{c.campus}{c.fail > 0 && <span style={{ color: "#c0392b", fontWeight: 600 }}>  ·  {c.fail} need attention</span>}</span>
+                <span style={{ color: "#7a838c", fontWeight: 600 }}>{c.tested}/{c.total}</span>
+              </div>
+              <div style={{ height: 10, background: "#e2e6ea", borderRadius: 99, overflow: "hidden" }}>
+                <div style={{ width: `${p}%`, height: "100%", background: c.fail > 0 ? "linear-gradient(90deg,#c0392b,#e05a4a)" : `linear-gradient(90deg,${GOLD},#ffcb47)` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ ...card, marginTop: 16 }}>
+        <h3 style={h3}>Recent imports</h3>
+        {log.length === 0 && <p style={muted}>No imports yet. Go to the Import tab to load tester CSV exports.</p>}
+        {log.slice(0, 6).map((e) => (
+          <div key={e.id} style={{ display: "flex", justifyContent: "space-between", padding: "9px 0", borderBottom: "1px solid #eceff1", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5 }}>
+            <span style={{ fontWeight: 600, color: "#2c333a" }}>{e.label}</span>
+            <span style={{ color: "#7a838c" }}>{e.merged + e.updated} results · {e.date}{e.unmatched ? ` · ${e.unmatched} unmatched` : ""}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Roster({ roster, results, isCustom, onEdit, onAdd, onExportRoster }) {
+  const [search, setSearch] = useState("");
+  const [campus, setCampus] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const campuses = ["All", ...CAMPUS_ORDER.filter((c) => roster.some((p) => p.campus === c))];
+  const list = useMemo(() => roster.filter((p) => {
+    if (campus !== "All" && p.campus !== campus) return false;
+    const s = statusOf(results[p.id]);
+    if (statusFilter !== "all" && s !== statusFilter) return false;
+    if (search.trim()) { const q = search.toLowerCase(); if (!`${p.loc} ${p.building} ${p.ext} ${p.campus}`.toLowerCase().includes(q)) return false; }
+    return true;
+  }), [search, campus, statusFilter, roster, results]);
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <h2 style={h2}>Roster <span style={{ color: "#9aa3ad", fontWeight: 600, fontSize: 15 }}>({list.length})</span></h2>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onExportRoster} style={secondaryBtn}>↧ Export Roster</button>
+          <button onClick={onAdd} style={primaryBtn}>+ Add Phone</button>
+        </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, margin: "14px 0 16px", flexWrap: "wrap" }}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search…" style={{ ...input, flex: 1, minWidth: 180 }} />
+        <select value={campus} onChange={(e) => setCampus(e.target.value)} style={select}>{campuses.map((c) => <option key={c}>{c}</option>)}</select>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={select}>
+          <option value="all">All statuses</option><option value="untested">Not tested</option><option value="fail">Needs attention</option><option value="pass">Pass</option>
+        </select>
+      </div>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        {list.map((p, i) => {
+          const r = results[p.id]; const s = statusOf(r); const m = STATUS_META[s];
+          return (
+            <div key={p.id} onClick={() => onEdit(p)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < list.length - 1 ? "1px solid #eceff1" : "none", cursor: "pointer" }}>
+              <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, color: NAVY, fontSize: 12.5, width: 38 }}>{String(p.seq).padStart(4, "0")}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 600, fontSize: 14.5, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {p.loc}{isCustom(p.id) && <span style={{ fontSize: 10.5, fontWeight: 700, color: GOLD, background: NAVY, padding: "1px 6px", borderRadius: 5, marginLeft: 8, verticalAlign: "middle" }}>ADDED</span>}
+                </div>
+                <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{p.campus}{p.building ? " · " + p.building : ""}{p.ext ? " · " + p.ext : ""}</div>
+              </div>
+              {r?.lastTested && <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{fmtDate(r.lastTested)}</span>}
+              <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, fontWeight: 700, color: m.color, background: m.bg, padding: "3px 10px", borderRadius: 99, whiteSpace: "nowrap" }}>{m.label}</span>
+              <span style={{ color: "#c2c9cf", fontSize: 16 }}>✎</span>
+            </div>
+          );
+        })}
+        {list.length === 0 && <p style={{ ...muted, padding: 24 }}>No phones match.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Attention({ roster, results }) {
+  const failing = roster.filter((p) => statusOf(results[p.id]) === "fail").sort((a, b) => String(a.campus).localeCompare(String(b.campus)) || a.seq - b.seq);
+  return (
+    <div>
+      <h2 style={h2}>Needs Attention <span style={{ color: "#c0392b", fontWeight: 800, fontSize: 18 }}>({failing.length})</span></h2>
+      <p style={muted}>Phones with a failed component or missing light, from the consolidated results.</p>
+      <div style={{ marginTop: 14 }}>
+        {failing.length === 0 && <div style={card}><p style={muted}>Nothing flagged.</p></div>}
+        {failing.map((p) => {
+          const r = results[p.id]; const issues = [];
+          if (r.button === "Not Working") issues.push("Button/Dialing");
+          if (r.mic === "Not Working") issues.push("Mic");
+          if (r.speaker === "Not Working") issues.push("Speaker");
+          if (r.lights === "No") issues.push("Blue light");
+          return (
+            <div key={p.id} style={{ background: "#fff", borderLeft: "4px solid #c0392b", borderRadius: 8, padding: "13px 16px", marginBottom: 10, boxShadow: "0 1px 3px rgba(0,0,0,.05)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 15, color: "#222" }}>{String(p.seq).padStart(4, "0")} · {p.loc}</span>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, color: "#9aa3ad", whiteSpace: "nowrap" }}>{p.campus} · {fmtDate(r.lastTested)}</span>
+              </div>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13, color: "#c0392b", fontWeight: 600, marginTop: 4 }}>{issues.join(", ")}</div>
+              {r.notes && <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13, color: "#6b747d", marginTop: 4 }}>{r.notes}</div>}
+              {p.ext && <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12, color: "#9aa3ad", marginTop: 4 }}>Dial/Ext {p.ext}</div>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Overdue({ roster, results }) {
+  const [thresh, setThresh] = useState(90);
+  const [includeNever, setIncludeNever] = useState(true);
+  const list = useMemo(() => {
+    return roster.map((p) => ({ p, d: daysSince(results[p.id]?.lastTested) }))
+      .filter(({ d }) => (d === Infinity ? includeNever : d >= thresh))
+      .sort((a, b) => b.d - a.d);
+  }, [roster, results, thresh, includeNever]);
+
+  return (
+    <div>
+      <h2 style={h2}>Overdue <span style={{ color: "#9aa3ad", fontWeight: 600, fontSize: 15 }}>({list.length})</span></h2>
+      <p style={muted}>Phones last tested longer ago than the threshold. Use this to catch anything slipping through a cycle.</p>
+      <div style={{ display: "flex", gap: 14, alignItems: "center", margin: "14px 0 16px", flexWrap: "wrap" }}>
+        <label style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 700, color: NAVY }}>Older than</label>
+        <select value={thresh} onChange={(e) => setThresh(Number(e.target.value))} style={select}>
+          {[30, 60, 90, 120, 180, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
+        </select>
+        <label style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, color: "#2c333a", display: "flex", alignItems: "center", gap: 7, cursor: "pointer" }}>
+          <input type="checkbox" checked={includeNever} onChange={(e) => setIncludeNever(e.target.checked)} /> Include never-tested
+        </label>
+      </div>
+      <div style={{ ...card, padding: 0, overflow: "hidden" }}>
+        {list.map(({ p, d }, i) => (
+          <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 16px", borderBottom: i < list.length - 1 ? "1px solid #eceff1" : "none" }}>
+            <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, color: NAVY, fontSize: 12.5, width: 38 }}>{String(p.seq).padStart(4, "0")}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 600, fontSize: 14.5, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.loc}</div>
+              <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{p.campus}{p.building ? " · " + p.building : ""}</div>
+            </div>
+            <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, fontWeight: 700, color: d === Infinity ? "#9aa3ad" : "#c0392b", whiteSpace: "nowrap" }}>
+              {d === Infinity ? "Never tested" : `${d} days ago`}
+            </span>
+          </div>
+        ))}
+        {list.length === 0 && <p style={{ ...muted, padding: 24 }}>Nothing overdue at this threshold.</p>}
+      </div>
+    </div>
+  );
+}
+
+const FIELDS = [
+  ["loc", "Location Description", "text", true], ["campus", "Campus", "campus", false], ["building", "Building", "text", false],
+  ["floor", "Floor", "text", false], ["intext", "Interior / Exterior", "intext", false], ["order", "Testing Order", "number", false],
+  ["ext", "Extension / Dial", "text", false], ["brand", "Brand", "text", false], ["model", "Model", "text", false],
+  ["conn", "Connectivity", "text", false], ["mount", "Mount", "text", false], ["buttons", "# Buttons", "text", false],
+  ["cameras", "# Cameras", "text", false],
+  ["speakers", "Amplified Speakers", "text", false], ["notes", "Install Note", "textarea", false],
+];
+
+function PhoneForm({ phone, isCustom, onSave, onDelete, onClose }) {
+  const init = {}; FIELDS.forEach(([k]) => { init[k] = phone ? (phone[k] ?? "") : ""; });
+  const [form, setForm] = useState(init);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const valid = String(form.loc).trim().length > 0;
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,20,45,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 18, width: "100%", maxWidth: 640, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.4)" }}>
+        <div style={{ background: NAVY, color: "#fff", padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 18 }}>{phone ? "Edit phone" : "Add phone"}</span>
+          <button onClick={onClose} style={{ ...iconBtn }}>✕</button>
+        </div>
+        <div style={{ padding: 22, overflowY: "auto" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+            {FIELDS.map(([k, label, type, req]) => (
+              <div key={k} style={{ gridColumn: (type === "textarea" || k === "loc") ? "1 / -1" : "auto" }}>
+                <label style={fieldLabel}>{label}{req && <span style={{ color: "#c0392b" }}> *</span>}</label>
+                {type === "textarea" ? (
+                  <textarea value={form[k]} onChange={(e) => set(k, e.target.value)} rows={2} style={{ ...input, width: "100%", boxSizing: "border-box", resize: "vertical" }} />
+                ) : type === "campus" ? (
+                  <select value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...select, width: "100%" }}>
+                    <option value="">—</option>{CAMPUS_ORDER.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                ) : type === "intext" ? (
+                  <select value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...select, width: "100%" }}>
+                    <option value="">—</option><option>Interior</option><option>Exterior</option>
+                  </select>
+                ) : (
+                  <input type={type === "number" ? "number" : "text"} value={form[k]} onChange={(e) => set(k, e.target.value)} style={{ ...input, width: "100%", boxSizing: "border-box" }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{ borderTop: "1px solid #e8ebee", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            {phone && !confirmDel && <button onClick={() => setConfirmDel(true)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "11px 16px" }}>Delete</button>}
+            {phone && confirmDel && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#c0392b", fontWeight: 600 }}>Remove this phone?</span>
+                <button onClick={() => onDelete(phone.id)} style={{ ...primaryBtn, background: "#c0392b", padding: "9px 14px", fontSize: 13 }}>Yes, remove</button>
+                <button onClick={() => setConfirmDel(false)} style={{ ...secondaryBtn, padding: "9px 14px", fontSize: 13 }}>Cancel</button>
+              </div>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={secondaryBtn}>Cancel</button>
+            <button disabled={!valid} onClick={() => onSave(form, phone ? phone.id : null)} style={{ ...primaryBtn, opacity: valid ? 1 : 0.45, cursor: valid ? "pointer" : "not-allowed" }}>{phone ? "Save changes" : "Add phone"}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Import({ onImport, log, onClear }) {
+  const [label, setLabel] = useState("");
+  const [drag, setDrag] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [confirmClear, setConfirmClear] = useState(false);
+  const fileRef = useRef(null);
+
+  const processFiles = (files) => {
+    const arr = Array.from(files).filter((f) => /\.csv$/i.test(f.name));
+    if (!arr.length) { setToast({ err: true, msg: "No CSV files found." }); return; }
+    let done = 0; const summaries = [];
+    arr.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const parsed = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
+        summaries.push(onImport(parsed.data, label.trim(), file.name));
+        done++;
+        if (done === arr.length) {
+          const tot = summaries.reduce((a, s) => ({ m: a.m + s.merged + s.updated, u: a.u + s.unmatched }), { m: 0, u: 0 });
+          setToast({ err: false, msg: `Imported ${tot.m} result${tot.m === 1 ? "" : "s"} from ${arr.length} file${arr.length === 1 ? "" : "s"}${tot.u ? ` · ${tot.u} unmatched row${tot.u === 1 ? "" : "s"}` : ""}.` });
+          setLabel("");
+        }
+      };
+      reader.readAsText(file);
+    });
+  };
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <h2 style={h2}>Import tester results</h2>
+      <p style={muted}>Load the CSV files testers export from the field app. Results merge into the consolidated set — when the same phone appears twice, the most recent test wins.</p>
+      <div style={{ ...card, marginTop: 16 }}>
+        <label style={fieldLabel}>Source label <span style={{ color: "#9aa3ad", fontWeight: 400 }}>(optional — e.g. tester name or campus)</span></label>
+        <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. East Campus — Mike" style={{ ...input, width: "100%", boxSizing: "border-box", marginBottom: 16 }} />
+        <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); processFiles(e.dataTransfer.files); }}
+          onClick={() => fileRef.current?.click()}
+          style={{ border: `2px dashed ${drag ? NAVY : "#cdd4da"}`, background: drag ? "#eef4fb" : "#fafbfc", borderRadius: 14, padding: "34px 20px", textAlign: "center", cursor: "pointer" }}>
+          <div style={{ fontSize: 32, color: NAVY }}>↥</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 700, color: NAVY, fontSize: 15, marginTop: 6 }}>Drop CSV files here or click to browse</div>
+          <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#9aa3ad", marginTop: 4 }}>You can select multiple files at once</div>
+          <input ref={fileRef} type="file" accept=".csv" multiple style={{ display: "none" }} onChange={(e) => processFiles(e.target.files)} />
+        </div>
+        {toast && <div style={{ marginTop: 14, padding: "11px 14px", borderRadius: 10, fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 600, background: toast.err ? "#fbe6e3" : "#e3f4e8", color: toast.err ? "#c0392b" : "#1a7d3c" }}>{toast.msg}</div>}
+      </div>
+      {log.length > 0 && (
+        <div style={{ ...card, marginTop: 16 }}>
+          <h3 style={h3}>Import history</h3>
+          {log.map((e) => (
+            <div key={e.id} style={{ padding: "9px 0", borderBottom: "1px solid #eceff1", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5 }}>
+              <div style={{ display: "flex", justifyContent: "space-between" }}><span style={{ fontWeight: 700, color: "#2c333a" }}>{e.label}</span><span style={{ color: "#9aa3ad" }}>{e.date}</span></div>
+              <div style={{ color: "#7a838c", fontSize: 12.5, marginTop: 2 }}>{e.merged} new · {e.updated} updated · {e.skipped} untested skipped{e.unmatched ? ` · ${e.unmatched} unmatched` : ""}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ marginTop: 20 }}>
+        {!confirmClear ? (
+          <button onClick={() => setConfirmClear(true)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "11px 18px" }}>Clear consolidated results</button>
+        ) : (
+          <div style={{ ...card, borderLeft: "4px solid #c0392b" }}>
+            <p style={{ ...muted, marginTop: 0 }}>This wipes imported/merged test results on this device (your roster edits stay). Export the master CSV first if you need it.</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmClear(false)} style={secondaryBtn}>Cancel</button>
+              <button onClick={() => { onClear(); setConfirmClear(false); setToast(null); }} style={{ ...primaryBtn, background: "#c0392b" }}>Clear results</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function UMLLogo({ variant = "mark", height = 36 }) {
+  if (variant === "full") {
+    const st = { height, width: Math.round(height * 311 / 393), display: "block", flexShrink: 0 };
+    return (
+      <svg viewBox="0 0 311 393" fill="none" style={st} preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.8564 233.134C13.8564 186.343 137.109 94.7154 137.109 64.8359C137.109 54.7629 125.145 51.8364 112.776 51.8364C86.8413 51.8364 14.6487 83.0256 14.6487 129.171C14.6487 146.067 25.417 155.493 45.757 160.036C30.3807 168.476 8.5855 163.432 -0.0161743 148.864V255.366H27.438C19.2729 250.661 13.8403 241.833 13.8403 233.151L13.8564 233.134Z" fill="black"/>
+      <path d="M122.752 44.6899C137.028 44.6899 147.942 47.7457 155.202 52.2406L109.671 0H0V121.296C11.5767 94.0848 50.7854 44.6899 122.752 44.6899Z" fill="black"/>
+      <path d="M62.8633 255.35H114.425V226.02C97.6581 239.23 80.0343 250.079 62.8633 255.35Z" fill="black"/>
+      <path d="M277.711 72.2249C252.294 99.8408 186.132 204.532 186.132 238.987C186.132 247.767 192.519 252.31 202.091 252.31C220.846 252.31 245.568 223.724 245.568 190.579C252.359 195.445 255.544 202.608 255.544 209.755C255.544 228.365 241.089 246.813 221.849 255.382H310.679V0H201.007L155.218 52.2406C163.335 57.4954 166.601 64.464 166.601 70.3494C166.601 103.479 40.9549 209.415 40.9549 238.648C40.9549 245.148 44.1401 246.441 51.319 246.441C109.154 246.441 210.078 109.865 239.974 72.1764L277.727 72.2249H277.711Z" fill="#1257D1"/>
+      <path d="M0.129303 301.964C0.129303 322.094 10.2023 328.998 28.3111 328.998C47.7295 328.998 56.412 320.8 56.412 302.045V268.996H37.2523V304.001C37.2523 310.339 35.2151 314.721 28.3111 314.721C20.437 314.721 19.3052 309.773 19.3052 304.001V268.996H0.129303V301.964Z" fill="black"/>
+      <path d="M83.559 327.462V307.639L83.1548 298.552L82.3464 289.951H82.5081L93.147 327.462H106.47L117.109 289.951H117.27L116.284 300.493L116.042 309.596V327.462H133.261V268.996H110.124L99.8084 305.456L89.4929 268.996H66.3557V327.462H83.559Z" fill="black"/>
+      <path d="M178.113 268.996H158.613L137.659 327.462H156.415L158.597 319.749H177.676L179.94 327.462H199.035L178.08 268.996H178.113ZM162.284 307.558L168.218 286.604L174.394 307.558H162.3H162.284Z" fill="black"/>
+      <path d="M251.583 285.957C250.208 275.722 242.819 267.444 226.57 267.444C211.953 267.444 201.234 273.701 201.234 286.119C201.234 308.448 234.848 302.352 234.848 311.212C234.848 313.977 231.679 315.513 226.893 315.513C225.018 315.513 222.997 315.028 221.444 314.058C219.811 313.088 218.68 311.536 218.275 309.434H199.924C200.328 319.976 210.401 328.998 225.826 328.998C241.251 328.998 253.183 322.417 253.183 308.852C253.183 287.574 219.569 293.023 219.569 284.259C219.569 282.141 221.428 280.929 225.664 280.929C227.524 280.929 229.238 281.252 230.612 281.98C231.986 282.707 233.053 283.936 233.377 285.957H251.566H251.583Z" fill="black"/>
+      <path d="M309.127 285.957C307.736 275.722 300.363 267.444 284.114 267.444C269.497 267.444 258.778 273.701 258.778 286.119C258.778 308.448 292.392 302.352 292.392 311.212C292.392 313.977 289.223 315.513 284.437 315.513C282.562 315.513 280.541 315.028 278.988 314.058C277.371 313.088 276.223 311.536 275.819 309.434H257.468C257.872 319.976 267.945 328.998 283.37 328.998C298.795 328.998 310.743 322.417 310.743 308.852C310.743 287.574 277.129 293.023 277.129 284.259C277.129 282.141 278.988 280.929 283.224 280.929C285.084 280.929 286.798 281.252 288.172 281.98C289.563 282.707 290.614 283.936 290.937 285.957H309.127Z" fill="black"/>
+      <path d="M0 340.073H16.5566V378.134H40.3405V391.263H0V340.073Z" fill="#1257D1"/>
+      <path d="M67.6492 338.844C83.9794 338.844 94.8932 350.033 94.8932 365.652C94.8932 381.271 83.9794 392.459 67.6492 392.459C51.319 392.459 40.4052 381.271 40.4052 365.652C40.4052 350.033 51.319 338.844 67.6492 338.844ZM67.6492 379.719C71.8692 379.719 78.3366 377.067 78.3366 365.668C78.3366 354.269 71.8692 351.618 67.6492 351.618C63.4292 351.618 56.9618 354.269 56.9618 365.668C56.9618 377.067 63.4292 379.719 67.6492 379.719Z" fill="#1257D1"/>
+      <path d="M152.017 391.247H135.913L130.124 360.058H129.979L124.336 391.247H108.151L93.5512 340.057H109.801L116.349 371.667H116.494L122.962 340.057H137.562L143.884 372.103H144.029L150.723 340.057H167.053L152.001 391.247H152.017Z" fill="#1257D1"/>
+      <path d="M171.904 340.073H216.384V353.186H188.461V359.573H213.829V371.764H188.461V378.15H217.208V391.279H171.904V340.089V340.073Z" fill="#1257D1"/>
+      <path d="M224.064 340.073H240.62V378.134H264.404V391.263H224.064V340.073Z" fill="#1257D1"/>
+      <path d="M270.128 340.073H286.685V378.134H310.469V391.263H270.128V340.073Z" fill="#1257D1"/>
+      </svg>
+    );
+  }
+  const st = { height, width: Math.round(height * 331 / 276), display: "block", flexShrink: 0 };
+  return (
+    <svg viewBox="-10 -10 331 276" fill="none" style={st} preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13.8564 233.134C13.8564 186.343 137.109 94.7154 137.109 64.8359C137.109 54.7629 125.145 51.8364 112.776 51.8364C86.8413 51.8364 14.6487 83.0256 14.6487 129.171C14.6487 146.067 25.417 155.493 45.757 160.036C30.3807 168.476 8.5855 163.432 -0.0161743 148.864V255.366H27.438C19.2729 250.661 13.8403 241.833 13.8403 233.151L13.8564 233.134Z" fill="black"/>
+      <path d="M122.752 44.6899C137.028 44.6899 147.942 47.7457 155.202 52.2406L109.671 0H0V121.296C11.5767 94.0848 50.7854 44.6899 122.752 44.6899Z" fill="black"/>
+      <path d="M62.8633 255.35H114.425V226.02C97.6581 239.23 80.0343 250.079 62.8633 255.35Z" fill="black"/>
+      <path d="M277.711 72.2249C252.294 99.8408 186.132 204.532 186.132 238.987C186.132 247.767 192.519 252.31 202.091 252.31C220.846 252.31 245.568 223.724 245.568 190.579C252.359 195.445 255.544 202.608 255.544 209.755C255.544 228.365 241.089 246.813 221.849 255.382H310.679V0H201.007L155.218 52.2406C163.335 57.4954 166.601 64.464 166.601 70.3494C166.601 103.479 40.9549 209.415 40.9549 238.648C40.9549 245.148 44.1401 246.441 51.319 246.441C109.154 246.441 210.078 109.865 239.974 72.1764L277.727 72.2249H277.711Z" fill="#1257D1"/>
+    </svg>
+  );
+}
+
+function Stat({ n, label, color }) {
+  return (
+    <div style={{ background: "#fff", borderRadius: 14, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.06)" }}>
+      <div style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 30, color, lineHeight: 1 }}>{n}</div>
+      <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#7a838c", marginTop: 5, fontWeight: 600 }}>{label}</div>
+    </div>
+  );
+}
+
+const page = { minHeight: "100vh", width: "100%", display: "flex", flexDirection: "column", background: "#f4f6f8", fontFamily: "'Public Sans',sans-serif" };
+const h2 = { fontFamily: "'Archivo',sans-serif", fontWeight: 800, fontSize: 24, color: NAVY, margin: 0 };
+const h3 = { fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 16, color: NAVY, margin: "0 0 14px" };
+const card = { background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,.06)" };
+const muted = { fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, color: "#7a838c", lineHeight: 1.5, margin: "6px 0 0" };
+const primaryBtn = { background: NAVY, color: "#fff", border: "none", borderRadius: 12, padding: "12px 20px", fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: "pointer" };
+const secondaryBtn = { background: "#eef0f2", color: NAVY, border: "none", borderRadius: 12, padding: "12px 20px", fontFamily: "'Archivo',sans-serif", fontWeight: 700, fontSize: 14.5, cursor: "pointer" };
+const ghostBtn = { background: "transparent", color: NAVY, border: "1.5px solid #cdd4da", borderRadius: 12, fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 14, cursor: "pointer" };
+const input = { padding: "11px 14px", borderRadius: 11, border: "1.5px solid #d8dde2", fontFamily: "'Public Sans',sans-serif", fontSize: 14.5, outline: "none" };
+const select = { padding: "11px 12px", borderRadius: 11, border: "1.5px solid #d8dde2", fontFamily: "'Public Sans',sans-serif", fontSize: 14, fontWeight: 600, color: NAVY, background: "#fff", cursor: "pointer" };
+const fieldLabel = { display: "block", fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 13, color: NAVY, marginBottom: 6 };
+const iconBtn = { width: 32, height: 32, borderRadius: 8, border: "none", background: "rgba(255,255,255,.18)", color: "#fff", fontSize: 16, cursor: "pointer" };
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+</script>
+</body>
+</html>
