@@ -432,6 +432,7 @@ footer {
   .tool-arrow { transition: none; }
 }
 </style>
+<script src="ucaps_shared.js"></script>
 </head>
 <body>
 
@@ -657,6 +658,9 @@ footer {
 </footer>
 
 <script>
+  // Password gate
+  if (typeof ucapsGate === 'function') ucapsGate();
+
   // Set last updated date
   document.getElementById('lastUpdated').textContent =
     new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
