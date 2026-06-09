@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS Budget Tracker</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="../ucaps_shared.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#F0EFE9;color:#1a1a1a;min-height:100vh}
+button,input,select,textarea{font-family:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid #378ADD;outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const {createElement:e,useState,useEffect,useRef,useCallback,Fragment,useMemo}=React;
+
+/* ─── design tokens ────────────────────────────────────────────────────────── */
+const T={
+  navy:"#1F3A5C",
+  navyLight:"#2B4F7A",
+  bg:"#F0EFE9",
+  surface:"#FAFAF8",
+  white:"#FFFFFF",
+  border:"#E2E0D8",
+  borderMid:"#CCC9BE",
+  text:"#1a1a1a",
+  textMid:"#555",
+  textLight:"#888",
+  status:{
+    forecast:{bg:"#EEF3FB",text:"#2B4F7A",border:"#B8CCE8",dot:"#4A7EC7"},
+    encumbered:{bg:"#FAEEDA",text:"#633806",border:"#F0C878",dot:"#D4840A"},
+    paid:{bg:"#EAF3DE",text:"#27500A",border:"#B4D688",dot:"#4A9B1A"},
+    transfer:{bg:"#F3EEF9",text:"#3C3489",border:"#C9A8E8",dot:"#7B5EC7"},
+  }
+};
+
+const fmt=n=>(n==null||isNaN(+n))?"$0.00":new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format(+n);
+const fmtShort=n=>{const abs=Math.abs(+n||0);return(n<0?"-":"")+new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",minimumFractionDigits:0,maximumFractionDigits:0}).format(abs);};
+const genId=()=>Date.now().toString(36)+Math.random().toString(36).substr(2,5);
+const pcnt=(a,b)=>b?Math.min(100,Math.max(0,Math.round(a/b*100))):0;
+const today=()=>new Date().toISOString().split("T")[0];
+const STORE="ucaps-tracker-fy27";
+const STATUSES=["forecast","encumbered","paid","transfer"];
+
+/* ─── budget math ──────────────────────────────────────────────────────────── */
+function calcFund(fund){
+  const items=fund.items||[];
+  const poPaidMap={};
+  items.filter(i=>i.status==="paid"&&i.po&&i.poParent).forEach(i=>{
+    poPaidMap[i.po]=(poPaidMap[i.po]||0)+(+i.amount||0);
+  });
+  const encumbered=items.filter(i=>i.status==="encumbered").reduce((s,i)=>{
+    if(i.isPO&&i.po)return s+Math.max(0,(+i.amount||0)-(poPaidMap[i.po]||0));
+    return s+(+i.amount||0);
+  },0);
+  const paid=items.filter(i=>i.status==="paid").reduce((s,i)=>s+(+i.amount||0),0);
+  const forecast=items.filter(i=>i.status==="forecast").reduce((s,i)=>s+(+i.amount||0),0);
+  const transfersIn=items.filter(i=>i.status==="transfer"&&i.direction==="in").reduce((s,i)=>s+(+i.amount||0),0);
+  const transfersOut=items.filter(i=>i.status==="transfer"&&i.direction==="out").reduce((s,i)=>s+(+i.amount||0),0);
+  const approved=+fund.approved||0;
+  const balance=approved+transfersIn-transfersOut-paid-encumbered;
+  const projected=balance-forecast;
+  const poSummaries={};
+  items.filter(i=>i.status==="encumbered"&&i.isPO&&i.po).forEach(i=>{
+    const spent=poPaidMap[i.po]||0;
+    poSummaries[i.po]={id:i.id,vendor:i.vendor,description:i.description,
+      original:+i.amount||0,spent,remaining:Math.max(0,(+i.amount||0)-spent),
+      invoiceCount:items.filter(x=>x.status==="paid"&&x.po===i.po&&x.poParent).length};
+  });
+  return{paid,encumbered,forecast,transfersIn,transfersOut,balance,projected,approved,poPaidMap,poSummaries};
+}
+function getFundPOs(fund){
+  return (fund.items||[]).filter(i=>i.status==="encumbered"&&i.isPO&&i.po);
+}
+
+/* ─── tiny atoms ──────────────────────────────────────────────────────────── */
+function StatusBadge({status,direction}){
+  if(status==="transfer"){
+    const c=T.status.transfer;
+    return e("span",{style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px",borderRadius:12,fontWeight:600,background:c.bg,color:c.text,border:`1px solid ${c.border}`}},
+      e("span",{style:{width:6,height:6,borderRadius:"50%",background:c.dot}}),
+      direction==="in"?"Transfer in":"Transfer out"
+    );
+  }
+  const c=T.status[status]||T.status.forecast;
+  return e("span",{style:{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,padding:"2px 8px",borderRadius:12,fontWeight:600,background:c.bg,color:c.text,border:`1px solid ${c.border}`}},
+    e("span",{style:{width:6,height:6,borderRadius:"50%",background:c.dot}}),
+    status.charAt(0).toUpperCase()+status.slice(1)
+  );
+}
+
+function Btn({children,onClick,primary,danger,small,disabled,style={}}){
+  const base={border:"1px solid",borderRadius:6,padding:small?"4px 10px":"7px 14px",fontSize:small?11:13,fontWeight:600,lineHeight:1,display:"inline-flex",alignItems:"center",gap:5,transition:"opacity .1s",opacity:disabled?.5:1,cursor:disabled?"not-allowed":"pointer"};
+  const v=danger?{background:"#FCEBEB",color:"#791F1F",borderColor:"#F7C1C1"}
+    :primary?{background:T.navy,color:"#fff",borderColor:T.navy}
+    :{background:T.white,color:T.text,borderColor:T.borderMid};
+  return e("button",{onClick:disabled?undefined:onClick,disabled,style:{...base,...v,...style}},
+    ...(Array.isArray(children)?children:[children]));
+}
+
+function KPI({label,value,sub,color,large}){
+  const colors={blue:{bg:"#EEF3FB",val:"#2B4F7A",label:"#4A7EC7"},green:{bg:"#EAF3DE",val:"#27500A",label:"#4A9B1A"},amber:{bg:"#FAEEDA",val:"#633806",label:"#D4840A"},red:{bg:"#FCEBEB",val:"#791F1F",label:"#C94040"},default:{bg:T.white,val:T.text,label:T.textLight}};
+  const c=colors[color]||colors.default;
+  return e("div",{style:{background:c.bg,border:`1px solid ${color?"transparent":T.border}`,borderRadius:8,padding:"12px 14px"}},
+    e("div",{style:{fontSize:10,color:c.label,fontWeight:600,textTransform:"uppercase",letterSpacing:".05em",marginBottom:5}},label),
+    e("div",{style:{fontSize:large?24:18,fontWeight:700,color:c.val,lineHeight:1}},value),
+    sub&&e("div",{style:{fontSize:11,color:c.label,marginTop:4}},sub)
+  );
+}
+
+function Field({label,value,onChange,type="text",placeholder="",required,options,small}){
+  const s={padding:small?"5px 8px":"7px 10px",border:`1px solid ${T.borderMid}`,borderRadius:6,fontSize:13,background:T.surface,width:"100%"};
+  return e("div",{style:{display:"flex",flexDirection:"column",gap:3}},
+    e("label",{style:{fontSize:11,color:T.textMid,fontWeight:600}},label,required&&e("span",{style:{color:"#C94040"}}," *")),
+    options
+      ?e("select",{value,onChange:ev=>onChange(ev.target.value),style:s},
+          ...options.map(([v,l])=>e("option",{key:v,value:v},l)))
+      :e("input",{type,value,placeholder,onChange:ev=>onChange(ev.target.value),style:s})
+  );
+}
+
+function Toast({toast}){
+  if(!toast)return null;
+  const c=toast.type==="error"?{bg:"#FCEBEB",text:"#791F1F",border:"#F7C1C1"}:toast.type==="info"?{bg:"#EEF3FB",text:"#2B4F7A",border:"#B8CCE8"}:{bg:"#EAF3DE",text:"#27500A",border:"#B4D688"};
+  return e("div",{style:{position:"fixed",top:16,right:16,zIndex:9999,background:c.bg,color:c.text,border:`1px solid ${c.border}`,padding:"10px 16px",borderRadius:8,fontSize:13,fontWeight:600,boxShadow:"0 4px 16px rgba(0,0,0,.12)",maxWidth:340}},toast.msg);
+}
+
+/* ─── add / edit item modal ──────────────────────────────────────────────── */
+function ItemModal({initial,onSave,onClose,fundName,availablePOs=[]}){
+  const isNew=!initial?.id;
+  const [f,setF]=useState(initial||{vendor:"",description:"",amount:"",status:"forecast",po:"",direction:"in",isPO:false,poParent:false,category:"",notes:"",date:today()});
+  const upd=(k,v)=>setF(x=>({...x,[k]:v}));
+
+  function save(){
+    if(!f.vendor){alert("Vendor / source is required.");return;}
+    const amt=parseFloat(f.amount);
+    if(!amt||amt<=0){alert("Enter a valid positive amount.");return;}
+    onSave({...f,id:f.id||genId(),amount:amt});
+    onClose();
+  }
+
+  const statusOpts=[["forecast","Forecast"],["encumbered","Encumbered"],["paid","Paid"],["transfer","Transfer"]];
+  const catOpts=[["","— Category —"],["Time and Materials","Time and Materials"],["Leases","Leases"],["Required Maintenance","Required Maintenance"],["Required Licensing","Required Licensing"],["Communications","Communications"],["Supplies","Supplies"],["Marketing","Marketing"],["Payroll","Payroll"],["Other","Other"]];
+
+  const row2=(a,b)=>e("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},a,b);
+
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:16},onClick:onClose},
+    e("div",{style:{background:T.white,borderRadius:12,padding:"24px 28px",width:520,maxWidth:"100%",boxShadow:"0 12px 40px rgba(0,0,0,.18)",maxHeight:"90vh",overflowY:"auto"},onClick:ev=>ev.stopPropagation()},
+      e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+        e("div",null,
+          e("div",{style:{fontWeight:700,fontSize:16}},(isNew?"Add expense":"Edit expense")+" — "+fundName),
+          e("div",{style:{fontSize:12,color:T.textLight,marginTop:2}},"Track from Forecast → Encumbered → Paid")
+        ),
+        e("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:22,color:T.textLight,lineHeight:1}},"×")
+      ),
+
+      e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+
+        e("div",{style:{gridColumn:"1/-1"}},e(Field,{label:"Vendor / source",value:f.vendor,onChange:v=>upd("vendor",v),required:true,placeholder:"e.g. Mercier Electric"})),
+        e("div",{style:{gridColumn:"1/-1"}},e(Field,{label:"Description",value:f.description,onChange:v=>upd("description",v),placeholder:"e.g. Monthly maintenance — June"})),
+
+        row2(
+          e(Field,{label:"Amount",type:"number",value:f.amount,onChange:v=>upd("amount",v),required:true,placeholder:"0.00"}),
+          e(Field,{label:"Date",type:"date",value:f.date||today(),onChange:v=>upd("date",v)})
+        ),
+
+        row2(
+          e(Field,{label:"Status",value:f.status,onChange:v=>upd("status",v),options:statusOpts}),
+          f.status==="transfer"
+            ?e(Field,{label:"Direction",value:f.direction||"in",onChange:v=>upd("direction",v),options:[["in","Transfer in (+)"],["out","Transfer out (−)"]]})
+            :e(Field,{label:"Category",value:f.category||"",onChange:v=>upd("category",v),options:catOpts})
+        ),
+
+        (f.status==="encumbered"||f.status==="paid")&&e(Field,{label:"PO / Invoice #",value:f.po||"",onChange:v=>upd("po",v),placeholder:"e.g. L001847721"}),
+
+        f.status==="encumbered"&&e("div",{style:{background:"#FFF8EE",border:"1px solid #F5C070",borderRadius:6,padding:"10px 12px"}},
+          e("label",{style:{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13}},
+            e("input",{type:"checkbox",checked:!!f.isPO,onChange:ev=>upd("isPO",ev.target.checked),style:{width:15,height:15,accentColor:"#D4840A"}}),
+            e("div",null,
+              e("div",{style:{fontWeight:600,color:"#7B3F00"}},"This is an annual PO (covers multiple invoices)"),
+              e("div",{style:{fontSize:11,color:"#A0622A",marginTop:2}},"Monthly invoices added against this PO will reduce its remaining encumbrance automatically.")
+            )
+          )
+        ),
+
+        f.status==="paid"&&availablePOs.length>0&&e("div",{style:{background:"#EEF3FB",border:"1px solid #B8CCE8",borderRadius:6,padding:"10px 12px"}},
+          e("div",{style:{fontSize:12,fontWeight:600,color:"#2B4F7A",marginBottom:6}},"Link to an open PO (optional)"),
+          e("div",{style:{fontSize:11,color:"#4A7EC7",marginBottom:8}},"Linking this payment to a PO reduces its remaining encumbrance automatically."),
+          e("select",{value:f.poParent?f.po:"",
+            onChange:ev=>{const v=ev.target.value;upd("poParent",!!v);if(v)upd("po",v);else upd("poParent",false);},
+            style:{width:"100%",padding:"6px 10px",border:"1px solid #B8CCE8",borderRadius:6,fontSize:13,background:"#fff"}},
+            e("option",{value:""},"— Not linked to a PO —"),
+            ...availablePOs.map(po=>e("option",{key:po.po,value:po.po},
+              po.vendor+(po.description?" — "+po.description:"")+" (PO: "+po.po+")"))
+          )
+        ),
+
+        e("div",null,
+          e("label",{style:{fontSize:11,color:T.textMid,fontWeight:600}},"Notes"),
+          e("textarea",{value:f.notes||"",onChange:ev=>upd("notes",ev.target.value),placeholder:"Optional notes...",style:{width:"100%",marginTop:3,padding:"7px 10px",border:"1px solid "+T.borderMid,borderRadius:6,fontSize:13,background:T.surface,resize:"vertical",minHeight:60}})
+        )
+      ),
+
+      e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:20}},
+        e("div",{style:{fontSize:12,color:T.textLight}},isNew?"":"Last edited: "+f.date),
+        e("div",{style:{display:"flex",gap:8}},
+          e(Btn,{onClick:onClose},"Cancel"),
+          e(Btn,{primary:true,onClick:save},isNew?"Add expense":"Save changes")
+        )
+      )
+    )
+  );
+}
+
+
+/* ─── promote status modal ───────────────────────────────────────────────── */
+function PromoteModal({item,targetStatus,onSave,onClose}){
+  const [po,setPo]=useState(item.po||"");
+  const [date,setDate]=useState(today());
+  const isPaid=targetStatus==="paid";
+  const isEnc=targetStatus==="encumbered";
+
+  function save(){
+    onSave({...item,status:targetStatus,po:po||item.po||"",date});
+    onClose();
+  }
+
+  const label=isPaid?"Mark as paid":"Add encumbrance";
+  const color=isPaid?{bg:T.status.paid.bg,border:T.status.paid.border}:{bg:T.status.encumbered.bg,border:T.status.encumbered.border};
+
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"},onClick:onClose},
+    e("div",{style:{background:T.white,borderRadius:12,padding:"24px 28px",width:420,maxWidth:"95vw",boxShadow:"0 12px 40px rgba(0,0,0,.18)"},onClick:ev=>ev.stopPropagation()},
+      e("div",{style:{fontWeight:700,fontSize:15,marginBottom:4}},label),
+      e("div",{style:{fontSize:13,color:T.textMid,marginBottom:20}},item.vendor+(item.description?` — ${item.description}`:"")),
+      e("div",{style:{background:color.bg,border:`1px solid ${color.border}`,borderRadius:8,padding:"12px 14px",marginBottom:20,fontSize:13}},
+        e("div",{style:{display:"flex",justifyContent:"space-between"}}),
+        e("div",{style:{fontWeight:600}},fmt(item.amount))
+      ),
+      e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        e(Field,{label:(isPaid?"Invoice / payment ref":"PO number")+" (optional)",value:po,onChange:setPo,placeholder:isPaid?"e.g. INV123456":"e.g. L001847721"}),
+        e(Field,{label:isPaid?"Payment date":"Encumbrance date",type:"date",value:date,onChange:setDate})
+      ),
+      e("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:20}},
+        e(Btn,{onClick:onClose},"Cancel"),
+        e(Btn,{primary:true,onClick:save},label)
+      )
+    )
+  );
+}
+
+/* ─── item row ────────────────────────────────────────────────────────────── */
+function ItemRow({item,onEdit,onPromote,onDelete,onAddInvoice,isOdd,poRemaining}){
+  const isPORow=item.isPO&&item.status==="encumbered";
+  const isInvoiceRow=item.poParent&&item.status==="paid";
+  const canPromote=!isPORow&&(item.status==="forecast"||item.status==="encumbered");
+  const nextStatus=item.status==="forecast"?"encumbered":item.status==="encumbered"?"paid":null;
+  const nextLabel=nextStatus==="paid"?"Mark paid":"Encumber";
+
+  return e("tr",{style:{background:isOdd?T.surface:T.white,borderBottom:`1px solid ${T.border}`,
+    ...(isPORow?{borderLeft:"3px solid #D4840A"}:{}),
+    ...(isInvoiceRow?{borderLeft:"3px solid #4A9B1A"}:{})}},
+    e("td",{style:{padding:"9px 12px"}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:5}},
+        isInvoiceRow&&e("span",{style:{fontSize:11,color:"#4A9B1A",fontWeight:700}},"L"),
+        e("div",{style:{fontWeight:600,fontSize:13}},item.vendor)
+      ),
+      item.description&&e("div",{style:{fontSize:11,color:T.textLight,marginTop:1,paddingLeft:isInvoiceRow?16:0}},item.description)
+    ),
+    e("td",{style:{padding:"9px 12px",fontSize:12,color:T.textMid}},item.category||"—"),
+    e("td",{style:{padding:"9px 12px"}}),
+    e("td",{style:{padding:"9px 12px",textAlign:"right",fontWeight:700,fontSize:13}},
+      isPORow&&poRemaining!=null
+        ?e("div",null,
+            e("div",null,fmt(poRemaining)+" rem."),
+            e("div",{style:{fontSize:10,color:T.textLight,fontWeight:400}},"of "+fmt(item.amount)+" PO")
+          )
+        :fmt(item.amount)
+    ),
+    e("td",{style:{padding:"9px 12px"}},e(StatusBadge,{status:item.status,direction:item.direction,isPO:item.isPO,poParent:item.poParent})),
+    e("td",{style:{padding:"9px 12px",fontSize:11,color:T.textLight}},item.po||"—"),
+    e("td",{style:{padding:"9px 12px",fontSize:11,color:T.textLight}},item.date||"—"),
+    e("td",{style:{padding:"9px 12px",fontSize:11,color:T.textLight,maxWidth:180}},
+      e("div",{style:{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},item.notes||"")
+    ),
+    e("td",{style:{padding:"9px 8px",textAlign:"right",whiteSpace:"nowrap"}},
+      e("div",{style:{display:"flex",gap:4,justifyContent:"flex-end"}},
+        isPORow&&e(Btn,{small:true,onClick:()=>onAddInvoice(item),
+          style:{background:"#EAF3DE",color:"#27500A",borderColor:"#B4D688"}},
+          "+ Invoice"),
+        canPromote&&e(Btn,{small:true,onClick:()=>onPromote(item,nextStatus),
+          style:{background:nextStatus==="paid"?T.status.paid.bg:T.status.encumbered.bg,
+            color:nextStatus==="paid"?T.status.paid.text:T.status.encumbered.text,
+            borderColor:nextStatus==="paid"?T.status.paid.border:T.status.encumbered.border}},
+          "→ "+nextLabel),
+        e(Btn,{small:true,onClick:()=>onEdit(item)},"Edit"),
+        e(Btn,{small:true,danger:true,onClick:()=>onDelete(item.id)},"×")
+      )
+    )
+  );
+}
+
+
+/* ─── fund detail view ────────────────────────────────────────────────────── */
+function FundView({fund,onUpdate,onBack,showToast}){
+  const [modal,setModal]=useState(null);
+  const [promoteTarget,setPromoteTarget]=useState(null);
+  const [filter,setFilter]=useState("all");
+  const [search,setSearch]=useState("");
+  const [sort,setSort]=useState("date-desc");
+  const calc=useMemo(()=>calcFund(fund),[fund]);
+
+  const addItem=item=>{
+    const arr=[...(fund.items||[]),{...item,id:genId()}];
+    onUpdate(fund.id,{items:arr});
+    showToast("Expense added");
+  };
+  const editItem=item=>{
+    const arr=(fund.items||[]).map(i=>i.id===item.id?item:i);
+    onUpdate(fund.id,{items:arr});
+    showToast("Saved","info");
+  };
+  const deleteItem=id=>{
+    if(!window.confirm("Remove this expense?"))return;
+    onUpdate(fund.id,{items:(fund.items||[]).filter(i=>i.id!==id)});
+    showToast("Removed","info");
+  };
+  const addInvoice=poItem=>{
+    setModal({vendor:poItem.vendor,description:"",amount:"",status:"paid",
+      po:poItem.po,poParent:true,isPO:false,category:poItem.category||"",notes:"",date:today()});
+  };
+  const promoteItem=(item,status)=>{
+    setPromoteTarget({item,status});
+  };
+  const confirmPromote=(updated)=>{
+    editItem(updated);
+    showToast(`Moved to ${updated.status}`);
+  };
+
+  const filtered=useMemo(()=>{
+    let items=fund.items||[];
+    if(filter!=="all")items=items.filter(i=>i.status===filter);
+    if(search)items=items.filter(i=>(i.vendor+i.description+i.notes).toLowerCase().includes(search.toLowerCase()));
+    items=[...items].sort((a,b)=>{
+      if(sort==="amount-desc")return(+b.amount||0)-(+a.amount||0);
+      if(sort==="amount-asc")return(+a.amount||0)-(+b.amount||0);
+      if(sort==="vendor")return(a.vendor||"").localeCompare(b.vendor||"");
+      if(sort==="status"){const o=STATUSES;return o.indexOf(a.status)-o.indexOf(b.status);}
+      return(b.date||"").localeCompare(a.date||"");
+    });
+    return items;
+  },[fund.items,filter,search,sort]);
+
+  const filterCounts=useMemo(()=>{
+    const items=fund.items||[];
+    return{all:items.length,...Object.fromEntries(STATUSES.map(s=>[s,items.filter(i=>i.status===s).length]))};
+  },[fund.items]);
+
+  const progPaid=pcnt(calc.paid,calc.approved);
+  const progEnc=pcnt(calc.encumbered,calc.approved);
+
+  return e("div",{style:{minHeight:"100vh"}},
+    modal&&e(ItemModal,{initial:modal==="new"?null:modal,onSave:modal==="new"?addItem:editItem,onClose:()=>setModal(null),fundName:fund.name,availablePOs:getFundPOs(fund)}),
+    promoteTarget&&e(PromoteModal,{item:promoteTarget.item,targetStatus:promoteTarget.status,onSave:confirmPromote,onClose:()=>setPromoteTarget(null)}),
+
+    e("div",{style:{background:T.navy,color:"#fff",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,position:"sticky",top:0,zIndex:100}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+        e("button",{onClick:onBack,style:{background:"none",border:"none",color:"rgba(255,255,255,.7)",fontSize:13,fontWeight:600,cursor:"pointer"}},"← All funds"),
+        e("span",{style:{color:"rgba(255,255,255,.3)"}}," / "),
+        e("span",{style:{fontSize:13,fontWeight:600}},fund.name)
+      ),
+      e(Btn,{primary:true,onClick:()=>setModal("new"),style:{background:"rgba(255,255,255,.15)",borderColor:"rgba(255,255,255,.3)",color:"#fff"}},"+ Add expense")
+    ),
+
+    e("div",{style:{padding:"20px 24px"}},
+      e("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:20}},
+        e(KPI,{label:"Approved budget",value:fmt(calc.approved)}),
+        e(KPI,{label:"Paid YTD",value:fmt(calc.paid),sub:progPaid+"% of budget",color:"green"}),
+        e(KPI,{label:"Encumbered",value:fmt(calc.encumbered),color:"amber"}),
+        e(KPI,{label:"Forecasted",value:fmt(calc.forecast),color:"blue"}),
+        e(KPI,{label:"Available balance",value:fmt(calc.balance),color:calc.balance>=0?"green":"red"}),
+        e(KPI,{label:"Projected end balance",value:fmt(calc.projected),color:calc.projected>=0?"green":"red",sub:"After all forecasts"})
+      ),
+
+      e("div",{style:{background:T.white,border:`1px solid ${T.border}`,borderRadius:8,padding:"14px 16px",marginBottom:16}},
+        e("div",{style:{fontSize:11,fontWeight:600,color:T.textLight,textTransform:"uppercase",letterSpacing:".05em",marginBottom:10}},"Budget utilization"),
+        e("div",{style:{height:10,background:T.bg,borderRadius:5,overflow:"hidden",marginBottom:6}},
+          e("div",{style:{height:"100%",display:"flex",borderRadius:5,overflow:"hidden"}},
+            e("div",{style:{width:`${progPaid}%`,background:T.status.paid.dot,transition:"width .4s"}}),
+            e("div",{style:{width:`${progEnc}%`,background:T.status.encumbered.dot,transition:"width .4s"}})
+          )
+        ),
+        e("div",{style:{display:"flex",gap:16,fontSize:11,color:T.textLight}},
+          e("span",null,e("span",{style:{color:T.status.paid.dot,fontWeight:700}},"■ "),"Paid "+progPaid+"%"),
+          e("span",null,e("span",{style:{color:T.status.encumbered.dot,fontWeight:700}},"■ "),"Encumbered "+progEnc+"%"),
+          e("span",null,e("span",{style:{color:T.border,fontWeight:700}},"■ "),"Remaining "+(100-progPaid-progEnc)+"%")
+        )
+      ),
+
+      Object.keys(calc.poSummaries||{}).length>0&&e("div",{style:{background:T.white,border:"1px solid #F5C070",borderRadius:8,overflow:"hidden",marginBottom:16}},
+        e("div",{style:{background:"#FFF8EE",borderBottom:"1px solid #F5C070",padding:"10px 16px",display:"flex",alignItems:"center",gap:8}},
+          e("div",{style:{fontWeight:700,fontSize:13,color:"#7B3F00"}},"Annual PO tracker"),
+          e("div",{style:{fontSize:11,color:"#A0622A",marginLeft:"auto"}},"Encumbered balance reduces automatically as invoices are added")
+        ),
+        e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:12}},
+          e("thead",null,e("tr",{style:{background:"#FFF8EE"}},
+            ...["Vendor","PO #","Original","Invoiced","Remaining","Usage","Invoices"].map(h=>
+              e("th",{key:h,style:{padding:"7px 12px",textAlign:["Original","Invoiced","Remaining"].includes(h)?"right":"left",fontSize:10,fontWeight:700,color:"#7B3F00",borderBottom:"1px solid #F5C070"}},h)
+            )
+          )),
+          e("tbody",null,
+            ...Object.entries(calc.poSummaries).map(([poNum,po],idx)=>{
+              const usedPct=po.original>0?Math.round(po.spent/po.original*100):0;
+              const over=po.spent>po.original;
+              return e("tr",{key:poNum,style:{borderBottom:"1px solid #f0eee8",background:idx%2===0?T.white:"#FFFDF8"}},
+                e("td",{style:{padding:"8px 12px",fontWeight:600}},
+                  po.vendor,
+                  po.description&&e("div",{style:{fontSize:11,color:T.textLight,fontWeight:400}},po.description)
+                ),
+                e("td",{style:{padding:"8px 12px",fontSize:11,color:T.textLight}},poNum||"—"),
+                e("td",{style:{padding:"8px 12px",textAlign:"right"}},fmt(po.original)),
+                e("td",{style:{padding:"8px 12px",textAlign:"right",color:"#27500A",fontWeight:600}},fmt(po.spent)),
+                e("td",{style:{padding:"8px 12px",textAlign:"right",fontWeight:700,color:over?"#791F1F":"#7B3F00"}},
+                  over?fmt(po.remaining)+" ⚠":fmt(po.remaining)
+                ),
+                e("td",{style:{padding:"8px 12px",minWidth:130}},
+                  e("div",{style:{display:"flex",alignItems:"center",gap:6}},
+                    e("div",{style:{flex:1,height:6,background:"#F5E6C8",borderRadius:3,overflow:"hidden"}},
+                      e("div",{style:{height:"100%",width:Math.min(100,usedPct)+"%",background:over?"#C94040":"#D4840A"}})
+                    ),
+                    e("span",{style:{fontSize:10,color:T.textLight,minWidth:30}},usedPct+"%")
+                  )
+                ),
+                e("td",{style:{padding:"8px 12px",fontSize:11,color:T.textLight}},po.invoiceCount)
+              );
+            })
+          )
+        )
+      ),
+      e("div",{style:{background:T.white,border:`1px solid ${T.border}`,borderRadius:8,overflow:"hidden"}},
+        e("div",{style:{padding:"12px 16px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}},
+          e("input",{value:search,onChange:ev=>setSearch(ev.target.value),placeholder:"Search expenses...",
+            style:{padding:"6px 10px",border:`1px solid ${T.borderMid}`,borderRadius:6,fontSize:13,width:200,background:T.surface}}),
+          e("div",{style:{display:"flex",gap:4}},
+            ...["all","forecast","encumbered","paid","transfer"].map(s=>
+              e("button",{key:s,onClick:()=>setFilter(s),
+                style:{padding:"4px 10px",borderRadius:12,fontSize:11,fontWeight:600,border:`1px solid ${filter===s?T.navy:T.borderMid}`,background:filter===s?T.navy:"transparent",color:filter===s?"#fff":T.textMid,cursor:"pointer"}},
+                (s==="all"?"All":s.charAt(0).toUpperCase()+s.slice(1))+" ("+filterCounts[s]+")"
+              )
+            )
+          ),
+          e("select",{value:sort,onChange:ev=>setSort(ev.target.value),style:{padding:"5px 8px",border:`1px solid ${T.borderMid}`,borderRadius:6,fontSize:11,background:T.surface,marginLeft:"auto"}},
+            e("option",{value:"date-desc"},"Date (newest)"),
+            e("option",{value:"amount-desc"},"Amount (high)"),
+            e("option",{value:"amount-asc"},"Amount (low)"),
+            e("option",{value:"vendor"},"Vendor A→Z"),
+            e("option",{value:"status"},"Status")
+          )
+        ),
+        filtered.length===0
+          ?e("div",{style:{textAlign:"center",padding:"48px 0",color:T.textLight,fontSize:13}},
+              filter==="all"?"No expenses yet. Click \"+ Add expense\" to get started.":"No "+filter+" items found.")
+          :e("div",{style:{overflowX:"auto"}},
+              e("table",{style:{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:800}},
+                e("thead",null,
+                  e("tr",{style:{background:T.bg}},
+                    ...["Vendor / description","Category","","Amount","Status","PO / Ref","Date","Notes","Actions"].map((c,i)=>
+                      e("th",{key:i,style:{padding:"8px 12px",textAlign:i===3||i===2?"right":"left",fontSize:10,fontWeight:700,color:T.textLight,borderBottom:`1px solid ${T.border}`,whiteSpace:"nowrap"}},c)
+                    )
+                  )
+                ),
+                e("tbody",null,
+                  ...filtered.map((item,idx)=>{const pr=item.isPO&&item.po&&calc.poSummaries?calc.poSummaries[item.po]:null;return e(ItemRow,{key:item.id,item,isOdd:idx%2===1,onEdit:setModal,onPromote:promoteItem,onDelete:deleteItem,onAddInvoice:addInvoice,poRemaining:pr?pr.remaining:null});})
+                ),
+                e("tfoot",null,
+                  e("tr",{style:{background:T.bg,borderTop:`2px solid ${T.borderMid}`}},
+                    e("td",{colSpan:3,style:{padding:"8px 12px",fontWeight:700,fontSize:12}},"Total ("+filtered.length+" items)"),
+                    e("td",{style:{padding:"8px 12px",textAlign:"right",fontWeight:700}},fmt(filtered.reduce((s,i)=>s+(+i.amount||0),0))),
+                    e("td",{colSpan:5})
+                  )
+                )
+              )
+            )
+      )
+    )
+  );
+}
+
+/* ─── excel import ────────────────────────────────────────────────────────── */
+function ImportModal({funds,onImport,onClose,showToast}){
+  const fileRef=useRef();
+  const [status,setStatus]=useState(null);
+  const [mode,setMode]=useState("merge"); // merge | replace | newFY
+
+  async function handleFile(ev){
+    const file=ev.target.files[0];if(!file)return;
+    setStatus("Reading…");
+    try{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(buf,{type:"array"});
+      const ls=wb.Sheets["Ledger"];
+      if(!ls){setStatus("❌ No 'Ledger' sheet found.");return;}
+      const rows=XLSX.utils.sheet_to_json(ls,{defval:""});
+
+      // Dashboard fund totals
+      const dash=wb.Sheets["Dashboard"];
+      let d51={approved:0,paid:0,balance:0},d52={approved:0,paid:0,balance:0};
+      if(dash){const dr=XLSX.utils.sheet_to_json(dash,{header:1,defval:""});
+        dr.forEach(r=>{
+          if(String(r[0]).includes("51161"))d51={approved:+r[1]||0,paid:+r[2]||0,balance:+r[5]||0};
+          if(String(r[0]).includes("52110"))d52={approved:+r[1]||0,paid:+r[2]||0,balance:+r[5]||0};
+        });
+      }
+
+      const items51=[],items52=[],itemsRL=[];
+      rows.forEach(r=>{
+        const st=String(r.Status||"").trim().toLowerCase();
+        if(!st)return;
+        const vend=String(r.Vendor||"").trim();
+        const desc=String(r.Description||"").trim();
+        const rawAmt=parseFloat(r.Amount||0)||0;
+        const amt=Math.abs(rawAmt);
+        const notes=String(r.Notes||"").trim();
+        const doc=String(r["Doc #"]||"").trim();
+        const cat=String(r.Category||"").trim();
+        const isPayroll=cat.toLowerCase().includes("payroll");
+        if(amt===0&&!["transfer","paid"].includes(st))return;
+
+        const mapStatus=s=>{
+          if(s==="paid")return"paid";
+          if(s==="encumbrance")return"encumbered";
+          if(s==="forecast")return"forecast";
+          if(s==="transfer")return"transfer";
+          return null;
+        };
+        const mapped=mapStatus(st);
+        if(!mapped)return;
+
+        const item={id:genId(),vendor:vend||"Unknown",description:desc,amount:amt,status:mapped,
+          po:doc,category:cat,notes,date:today(),
+          direction:st==="transfer"?(rawAmt<0?"in":"out"):"in"};
+
+        if(isPayroll)items52.push(item);
+        else items51.push(item);
+      });
+
+      // Res life
+      const rls=wb.Sheets["Residence Life Budget Spend"];
+      if(rls){
+        const rlRows=XLSX.utils.sheet_to_json(rls,{defval:""});
+        rlRows.forEach(r=>{
+          const rStatus=String(r.Status||"").toLowerCase();
+          const cost=parseFloat(r.Cost)||0;
+          if(!cost)return;
+          itemsRL.push({id:genId(),vendor:String(r.Building||"Residence Life"),description:String(r["Project Name/Camera Name"]||""),
+            amount:cost,status:rStatus==="funded"?"paid":"forecast",po:"",category:"Camera/Security",notes:"",date:today()});
+        });
+      }
+
+      const newFunds=[
+        {id:"51161",name:"Fund 51161 — General Operating Fund",approved:d51.approved||0,fiscal:"FY26",items:items51,notes:""},
+        {id:"52110",name:"Fund 52110 — Gen Ops Contract Payroll",approved:d52.approved||0,fiscal:"FY26",items:items52,notes:""},
+        {id:"reslife",name:"Residence Life — Camera & Security",approved:36626.01,fiscal:"FY26",items:itemsRL,notes:""},
+      ];
+
+      const summary=`✅ Imported: ${items51.length} items for Fund 51161, ${items52.length} for Fund 52110, ${itemsRL.length} for Residence Life.`;
+      setStatus(summary);
+
+      if(mode==="replace"){
+        setTimeout(()=>{onImport(newFunds);onClose();},1200);
+      }else if(mode==="merge"){
+        const merged=funds.map(f=>{
+          const nf=newFunds.find(x=>x.id===f.id);
+          if(!nf)return f;
+          const existingIds=new Set((f.items||[]).map(i=>i.po+i.vendor+i.amount));
+          const fresh=nf.items.filter(i=>!existingIds.has(i.po+i.vendor+i.amount));
+          return{...f,approved:nf.approved||f.approved,items:[...(f.items||[]),...fresh]};
+        });
+        const existingIds=new Set(funds.map(f=>f.id));
+        const added=newFunds.filter(f=>!existingIds.has(f.id));
+        setTimeout(()=>{onImport([...merged,...added]);onClose();},1200);
+      }
+    }catch(err){setStatus("❌ Error: "+err.message);console.error(err);}
+    ev.target.value="";
+  }
+
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"},onClick:onClose},
+    e("div",{style:{background:T.white,borderRadius:12,padding:"28px 32px",width:500,maxWidth:"95vw",boxShadow:"0 12px 40px rgba(0,0,0,.18)"},onClick:ev=>ev.stopPropagation()},
+      e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+        e("div",{style:{fontWeight:700,fontSize:16}},"Import from Excel tracker"),
+        e("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:22,color:T.textLight}},"×")
+      ),
+      e("p",{style:{fontSize:13,color:T.textMid,marginBottom:16,lineHeight:1.6}},
+        "Reads the ",e("strong",null,"Ledger"),", ",e("strong",null,"Dashboard"),", and ",e("strong",null,"Residence Life Budget Spend")," sheets. Maps Encumbrance → Encumbered, Forecast → Forecast, Paid → Paid, Transfer → Transfer."
+      ),
+      e("div",{style:{marginBottom:16}},
+        e("div",{style:{fontSize:11,fontWeight:600,color:T.textMid,marginBottom:8}},"Import mode"),
+        ...[ ["merge","Merge — add new items, keep existing ones"],["replace","Replace — overwrite all data with this file"] ].map(([v,l])=>
+          e("label",{key:v,style:{display:"flex",alignItems:"center",gap:8,fontSize:13,marginBottom:6,cursor:"pointer"}},
+            e("input",{type:"radio",name:"mode",value:v,checked:mode===v,onChange:()=>setMode(v)}),l
+          )
+        )
+      ),
+      status&&e("div",{style:{padding:"10px 14px",background:T.bg,borderRadius:6,fontSize:13,marginBottom:16}},status),
+      e("input",{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile}),
+      e("div",{style:{display:"flex",gap:8}},
+        e(Btn,{onClick:onClose},"Cancel"),
+        e(Btn,{primary:true,onClick:()=>fileRef.current?.click()},"📂 Choose Excel file")
+      )
+    )
+  );
+}
+
+/* ─── new fund modal ──────────────────────────────────────────────────────── */
+function NewFundModal({funds,onSave,onClose}){
+  const [f,setF]=useState({name:"",id:"",approved:"",fiscal:"FY27",notes:""});
+  const s=(k,v)=>setF(x=>({...x,[k]:v}));
+  function save(){
+    if(!f.name||!f.id){alert("Name and ID required.");return;}
+    if(funds.find(x=>x.id===f.id)){alert("Fund ID already exists.");return;}
+    onSave({id:f.id,name:f.name,approved:parseFloat(f.approved)||0,fiscal:f.fiscal,items:[],notes:f.notes});
+    onClose();
+  }
+  return e("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}},
+    e("div",{style:{background:T.white,borderRadius:12,padding:"24px 28px",width:460,maxWidth:"95vw",boxShadow:"0 12px 40px rgba(0,0,0,.18)"}},
+      e("div",{style:{fontWeight:700,fontSize:15,marginBottom:20}},"Add fund"),
+      e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+        e(Field,{label:"Fund name",value:f.name,onChange:v=>s("name",v),required:true,placeholder:"e.g. Fund 54321 — Special Projects"}),
+        e("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          e(Field,{label:"Fund ID",value:f.id,onChange:v=>s("id",v),required:true,placeholder:"e.g. 54321"}),
+          e(Field,{label:"Fiscal year",value:f.fiscal,onChange:v=>s("fiscal",v),placeholder:"FY27"})
+        ),
+        e(Field,{label:"Approved budget",type:"number",value:f.approved,onChange:v=>s("approved",v),placeholder:"0.00"}),
+        e("div",null,
+          e("label",{style:{fontSize:11,color:T.textMid,fontWeight:600}},"Notes"),
+          e("textarea",{value:f.notes,onChange:ev=>s("notes",ev.target.value),style:{width:"100%",marginTop:3,padding:"7px 10px",border:`1px solid ${T.borderMid}`,borderRadius:6,fontSize:13,background:T.surface,resize:"vertical",minHeight:52}})
+        )
+      ),
+      e("div",{style:{display:"flex",justifyContent:"flex-end",gap:8,marginTop:20}},
+        e(Btn,{onClick:onClose},"Cancel"),
+        e(Btn,{primary:true,onClick:save},"Add fund")
+      )
+    )
+  );
+}
+
+/* ─── pdf export ──────────────────────────────────────────────────────────── */
+function ExportView({funds,mode,onBack}){
+  const ref=useRef();
+  const todayStr=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+
+  function print(){
+    const win=window.open("","_blank");
+    if(!win){alert("Please allow popups.");return;}
+    const css=`*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;padding:24px}@page{margin:.5in}@media print{body{padding:0}}.fh{background:#1F3A5C;color:#fff;padding:8px 14px;font-weight:700;font-size:12px}.kg{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:8px;padding:10px;background:#f5f5f0}.kc{background:#fff;border:1px solid #e0e0d8;border-radius:5px;padding:8px 10px}.kc.b{background:#EEF3FB}.kc.g{background:#EAF3DE}.kc.a{background:#FAEEDA}.kc.r{background:#FCEBEB}.kl{font-size:9px;color:#666;margin-bottom:2px;font-weight:700}.kv{font-size:14px;font-weight:700}.kc.b .kv{color:#2B4F7A}.kc.g .kv{color:#27500A}.kc.a .kv{color:#633806}.kc.r .kv{color:#791F1F}.fund{border:1px solid #e0e0d8;border-radius:6px;margin-bottom:14px;overflow:hidden;page-break-inside:avoid}.sl{font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.06em;padding:10px 12px 4px}.tw{padding:0 12px 12px}table{width:100%;border-collapse:collapse}th{text-align:left;padding:5px 8px;font-size:10px;font-weight:700;color:#666;border-bottom:1px solid #e0e0d8;background:#f5f5f0}td{padding:5px 8px;font-size:11px;border-bottom:1px solid #f0f0e8}.tr td{background:#f0f0e8;font-weight:700}.r{text-align:right}.tg{display:inline-block;font-size:9px;padding:1px 6px;border-radius:10px;font-weight:700}.tg.p{background:#EAF3DE;color:#27500A}.tg.e{background:#FAEEDA;color:#633806}.tg.f{background:#EEF3FB;color:#2B4F7A}.tg.t{background:#F3EEF9;color:#3C3489}`;
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>UCAPS Budget — ${todayStr}</title><style>${css}</style></head><body>${ref.current.innerHTML}</body></html>`);
+    win.document.close();setTimeout(()=>win.print(),500);
+  }
+
+  const body=()=>{
+    if(mode==="onepage"){
+      const allFunds=funds.map(fund=>{const c=calcFund(fund);return{fund,c};});
+      return e("div",null,
+        e("table",{style:{marginBottom:20}},
+          e("thead",null,e("tr",{style:{background:"#f5f5f0"}},
+            ...["Fund","Approved","Paid","Encumbered","Forecast","Balance","Projected end"].map(h=>
+              e("th",{key:h,style:{padding:"6px 8px",textAlign:h==="Fund"?"left":"right",fontSize:10,color:"#666",borderBottom:"1px solid #e0e0d8"}},h)
+            )
+          )),
+          e("tbody",null,...allFunds.map(({fund,c})=>
+            e("tr",{key:fund.id,style:{borderBottom:"1px solid #f0f0e8"}},
+              e("td",{style:{padding:"7px 8px",fontWeight:700,fontSize:12}},fund.name),
+              e("td",{style:{padding:"7px 8px",textAlign:"right"}},fmt(c.approved)),
+              e("td",{style:{padding:"7px 8px",textAlign:"right",color:"#27500A",fontWeight:700}},fmt(c.paid)),
+              e("td",{style:{padding:"7px 8px",textAlign:"right",color:"#633806"}},fmt(c.encumbered)),
+              e("td",{style:{padding:"7px 8px",textAlign:"right",color:"#2B4F7A"}},fmt(c.forecast)),
+              e("td",{style:{padding:"7px 8px",textAlign:"right",fontWeight:700,color:c.balance>=0?"#27500A":"#791F1F"}},fmt(c.balance)),
+              e("td",{style:{padding:"7px 8px",textAlign:"right",fontWeight:700,color:c.projected>=0?"#27500A":"#791F1F"}},fmt(c.projected))
+            )
+          ))
+        )
+      );
+    }
+
+    return e("div",null,...funds.map(fund=>{
+      const c=calcFund(fund);
+      const groups={forecast:(fund.items||[]).filter(i=>i.status==="forecast"),encumbered:(fund.items||[]).filter(i=>i.status==="encumbered"),paid:(fund.items||[]).filter(i=>i.status==="paid"),transfer:(fund.items||[]).filter(i=>i.status==="transfer")};
+      return e("div",{key:fund.id,className:"fund"},
+        e("div",{className:"fh"},fund.name+(fund.fiscal?" — "+fund.fiscal:"")),
+        e("div",{className:"kg"},
+          ...[["Approved",fmt(c.approved),""],["Paid",fmt(c.paid),"g"],["Encumbered",fmt(c.encumbered),"a"],["Forecast",fmt(c.forecast),"b"],["Balance",fmt(c.balance),c.balance>=0?"g":"r"],["Projected",fmt(c.projected),c.projected>=0?"g":"r"]].map(([l,v,cl])=>
+            e("div",{key:l,className:`kc ${cl}`.trim()},e("div",{className:"kl"},l),e("div",{className:"kv"},v))
+          )
+        ),
+        ...["forecast","encumbered","paid","transfer"].map(st=>{
+          const items=groups[st];if(!items.length)return null;
+          const stLabel=st.charAt(0).toUpperCase()+st.slice(1);
+          return e(Fragment,{key:st},
+            e("div",{className:"sl"},stLabel+" items"),
+            e("div",{className:"tw"},e("table",null,
+              e("thead",null,e("tr",null,...["Vendor","Description","Category","Amount","PO / Ref","Date","Notes"].map(h=>e("th",{key:h},h)))),
+              e("tbody",null,
+                ...items.map(i=>e("tr",{key:i.id},
+                  e("td",null,i.vendor),e("td",null,i.description||"—"),e("td",{style:{fontSize:10,color:"#888"}},i.category||"—"),
+                  e("td",{className:"r"},fmt(i.amount)),e("td",{style:{fontSize:10,color:"#888"}},i.po||"—"),
+                  e("td",{style:{fontSize:10,color:"#888"}},i.date||"—"),e("td",{style:{fontSize:10,color:"#888",maxWidth:120}},i.notes||"—")
+                )),
+                e("tr",{className:"tr"},e("td",{colSpan:3},"Total "+stLabel),e("td",{className:"r"},fmt(items.reduce((s,i)=>s+(+i.amount||0),0))),e("td",{colSpan:3}))
+              )
+            ))
+          );
+        })
+      );
+    }));
+  };
+
+  return e("div",null,
+    e("div",{style:{background:T.navy,color:"#fff",padding:"0 24px",display:"flex",justifyContent:"space-between",alignItems:"center",height:52,position:"sticky",top:0,zIndex:100}},
+      e("div",{style:{display:"flex",alignItems:"center",gap:10}},
+        e("button",{onClick:onBack,style:{background:"none",border:"none",color:"rgba(255,255,255,.7)",fontSize:13,fontWeight:600,cursor:"pointer"}},"← Back"),
+        e("span",{style:{fontSize:13,fontWeight:600}},(mode==="full"?"Full overview":"One-pager")+" — preview")
+      ),
+      e("button",{onClick:print,style:{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.3)",color:"#fff",borderRadius:6,padding:"7px 14px",fontSize:13,fontWeight:600,cursor:"pointer"}},"🖨 Print / Save PDF")
+    ),
+    e("div",{style:{padding:"20px 24px 48px"}},
+      e("div",{ref,style:{background:T.white,border:`1px solid ${T.border}`,borderRadius:8,padding:20,maxWidth:960,color:"#1a1a1a"}},
+        e("div",{style:{borderBottom:"2px solid #1a1a1a",paddingBottom:10,marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"flex-end"}},
+          e("div",null,
+            e("div",{style:{fontSize:9,fontWeight:700,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginBottom:3}},"UCAPS — U Card & Parking Services"),
+            e("div",{style:{fontSize:20,fontWeight:700,color:T.navy}},"Budget "+(mode==="full"?"Overview":"Summary"))
+          ),
+          e("span",{style:{fontSize:10,color:"#888",border:"1px solid #ddd",borderRadius:4,padding:"3px 8px"}},todayStr)
+        ),
+        body()
+      )
+    )
+  );
+}
+
+/* ─── dashboard ───────────────────────────────────────────────────────────── */
+function Dashboard({funds,onSelect,onAddFund,onDelete,onImport,showToast}){
+  const [showImport,setShowImport]=useState(false);
+  const [showNewFund,setShowNewFund]=useState(false);
+
+  const totals=useMemo(()=>{
+    return funds.reduce((acc,f)=>{
+      const c=calcFund(f);
+      acc.approved+=c.approved;acc.paid+=c.paid;acc.encumbered+=c.encumbered;acc.forecast+=c.forecast;acc.balance+=c.balance;acc.projected+=c.projected;
+      return acc;
+    },{approved:0,paid:0,encumbered:0,forecast:0,balance:0,projected:0});
+  },[funds]);
+
+  return e("div",{style:{padding:"20px 24px 48px"}},
+    showImport&&e(ImportModal,{funds,onImport:f=>{onImport(f);showToast(`Imported ${f.reduce((s,x)=>s+(x.items||[]).length,0)} expenses`);},onClose:()=>setShowImport(false),showToast}),
+    showNewFund&&e(NewFundModal,{funds,onSave:f=>{onAddFund(f);setShowNewFund(false);showToast("Fund added");},onClose:()=>setShowNewFund(false)}),
+
+    e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:24}},
+      e("div",null,
+        e("div",{style:{fontSize:24,fontWeight:700,marginBottom:2}},"UCAPS Budget Tracker"),
+        e("div",{style:{fontSize:13,color:T.textMid}},"Track expenses from forecast through payment — all in one place")
+      ),
+      e("div",{style:{display:"flex",gap:8}},
+        e(Btn,{onClick:()=>setShowImport(true)},"📂 Import Excel"),
+        e(Btn,{primary:true,onClick:()=>setShowNewFund(true)},"+ Add fund")
+      )
+    ),
+
+    e("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:10,marginBottom:24}},
+      e(KPI,{label:"Total approved",value:fmt(totals.approved)}),
+      e(KPI,{label:"Total paid",value:fmt(totals.paid),color:"green"}),
+      e(KPI,{label:"Total encumbered",value:fmt(totals.encumbered),color:"amber"}),
+      e(KPI,{label:"Total forecast",value:fmt(totals.forecast),color:"blue"}),
+      e(KPI,{label:"Combined balance",value:fmt(totals.balance),color:totals.balance>=0?"green":"red"}),
+      e(KPI,{label:"Projected end balance",value:fmt(totals.projected),color:totals.projected>=0?"green":"red"})
+    ),
+
+    e("div",{style:{display:"flex",flexDirection:"column",gap:12}},
+      ...funds.map(fund=>{
+        const c=calcFund(fund);
+        const p=pcnt(c.paid,c.approved),pEnc=pcnt(c.encumbered,c.approved);
+        const items=fund.items||[];
+        const counts={forecast:items.filter(i=>i.status==="forecast").length,encumbered:items.filter(i=>i.status==="encumbered").length,paid:items.filter(i=>i.status==="paid").length};
+
+        return e("div",{key:fund.id,style:{background:T.white,border:`1px solid ${T.border}`,borderRadius:10,overflow:"hidden",cursor:"pointer",transition:"box-shadow .15s"},
+          onClick:()=>onSelect(fund.id),
+          onMouseEnter:ev=>ev.currentTarget.style.boxShadow="0 4px 20px rgba(0,0,0,.08)",
+          onMouseLeave:ev=>ev.currentTarget.style.boxShadow="none"},
+          e("div",{style:{background:T.navy,color:"#fff",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}},
+            e("div",null,
+              e("div",{style:{fontWeight:700,fontSize:14}},fund.name),
+              fund.fiscal&&e("div",{style:{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:1}},fund.fiscal+" · "+items.length+" expenses")
+            ),
+            e("div",{style:{display:"flex",gap:8,alignItems:"center"}},
+              e("button",{onClick:ev=>{ev.stopPropagation();if(window.confirm(`Remove "${fund.name}"?`))onDelete(fund.id);},
+                style:{background:"rgba(255,255,255,.12)",border:"none",color:"rgba(255,255,255,.5)",fontSize:16,borderRadius:4,padding:"2px 6px",cursor:"pointer"}},"×")
+            )
+          ),
+          e("div",{style:{padding:"14px 16px"}},
+            e("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(110px,1fr))",gap:8,marginBottom:12}},
+              e(KPI,{label:"Approved",value:fmt(c.approved)}),
+              e(KPI,{label:"Paid",value:fmt(c.paid),color:"green",sub:p+"% of budget"}),
+              e(KPI,{label:"Encumbered",value:fmt(c.encumbered),color:"amber"}),
+              e(KPI,{label:"Forecast",value:fmt(c.forecast),color:"blue"}),
+              e(KPI,{label:"Balance",value:fmt(c.balance),color:c.balance>=0?"green":"red"}),
+              e(KPI,{label:"Projected",value:fmt(c.projected),color:c.projected>=0?"green":"red",sub:"After forecasts"})
+            ),
+            e("div",{style:{height:6,background:T.bg,borderRadius:3,overflow:"hidden",marginBottom:8}},
+              e("div",{style:{height:"100%",display:"flex",borderRadius:3,overflow:"hidden"}},
+                e("div",{style:{width:`${p}%`,background:T.status.paid.dot}}),
+                e("div",{style:{width:`${pEnc}%`,background:T.status.encumbered.dot}})
+              )
+            ),
+            e("div",{style:{display:"flex",gap:12,fontSize:11,color:T.textLight}},
+              ...[["forecast","Forecast"],["encumbered","Encumbered"],["paid","Paid"]].map(([s,l])=>{
+                const c2=T.status[s];
+                return e("span",{key:s,style:{display:"flex",alignItems:"center",gap:4}},
+                  e("span",{style:{width:7,height:7,borderRadius:"50%",background:c2.dot,display:"inline-block"}}),
+                  counts[s]+" "+l
+                );
+              })
+            )
+          )
+        );
+      })
+    ),
+
+    funds.length===0&&e("div",{style:{textAlign:"center",padding:"64px 0",color:T.textLight}},
+      e("div",{style:{fontSize:32,marginBottom:12}},"🏛"),
+      e("div",{style:{fontSize:16,fontWeight:600,marginBottom:8,color:T.textMid}},"No funds yet"),
+      e("div",{style:{fontSize:13,marginBottom:20}},"Add a fund to start tracking, or import your Excel tracker to bring in existing data."),
+      e("div",{style:{display:"flex",gap:8,justifyContent:"center"}},
+        e(Btn,{onClick:()=>setShowImport(true)},"📂 Import Excel"),
+        e(Btn,{primary:true,onClick:()=>setShowNewFund(true)},"+ Add fund")
+      )
+    )
+  );
+}
+
+/* ─── data export / import json ────────────────────────────────────────────── */
+function exportJSON(funds){
+  const blob=new Blob([JSON.stringify({version:2,exported:new Date().toISOString(),funds},null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ucaps-budget-"+new Date().toISOString().split("T")[0]+".json";a.click();
+}
+async function importJSON(file){
+  const text=await file.text();
+  const data=JSON.parse(text);
+  if(data.version===2&&data.funds)return data.funds;
+  if(Array.isArray(data))return data;
+  throw new Error("Unrecognized format");
+}
+
+/* ─── app root ────────────────────────────────────────────────────────────── */
+function App(){
+  const [funds,setFunds]=useState([]);
+  const [view,setView]=useState("dashboard");
+  const [activeFundId,setActiveFundId]=useState(null);
+  const [exportMode,setExportMode]=useState(null);
+  const [toast,setToast]=useState(null);
+  const [loaded,setLoaded]=useState(false);
+  const jsonImportRef=useRef();
+
+  useEffect(()=>{
+    // Load from localStorage immediately (fast), then sync from Supabase
+    try{const s=localStorage.getItem(STORE);if(s){const p=JSON.parse(s);if(p&&p.length)setFunds(p);}}catch{}
+    setLoaded(true);
+    // Background sync from Supabase
+    if(typeof db!=="undefined"){
+      db.get("budget-funds").then(remote=>{
+        if(remote&&remote.length){
+          setFunds(remote);
+          try{localStorage.setItem(STORE,JSON.stringify(remote));}catch{}
+        }
+      }).catch(()=>{});
+    }
+  },[]);
+
+  const persist=useCallback(updated=>{
+    setFunds(updated);
+    try{localStorage.setItem(STORE,JSON.stringify(updated));}catch(e){}
+    // Sync to Supabase in background
+    if(typeof db!=="undefined"){
+      db.set("budget-funds",updated).catch(()=>{});
+    }
+  },[]);
+
+  const showToast=(msg,type="success")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
+  const updateFund=(id,updates)=>persist(funds.map(f=>f.id===id?{...f,...updates}:f));
+  const activeFund=funds.find(f=>f.id===activeFundId);
+
+  if(!loaded)return e("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontSize:14,color:T.textLight}},"Loading…");
+  if(exportMode)return e(ExportView,{funds,mode:exportMode,onBack:()=>setExportMode(null)});
+
+  return e("div",{style:{minHeight:"100vh",background:T.bg}},
+    e(Toast,{toast}),
+    e("input",{ref:jsonImportRef,type:"file",accept:".json",style:{display:"none"},onChange:async ev=>{
+      try{const f=await importJSON(ev.target.files[0]);persist(f);showToast("Data imported from JSON");}
+      catch(err){showToast("Import failed: "+err.message,"error");}
+      ev.target.value="";
+    }}),
+
+    view==="dashboard"&&e(Fragment,null,
+      e("div",{style:{background:T.navy,color:"#fff",padding:"0 24px",display:"flex",alignItems:"center",justifyContent:"space-between",height:52,position:"sticky",top:0,zIndex:100}},
+        e("div",{style:{fontWeight:700,fontSize:15,letterSpacing:".01em"}},"🏛 UCAPS Budget Tracker"),
+        e("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+          e("button",{onClick:()=>exportJSON(funds),style:{background:"none",border:"1px solid rgba(255,255,255,.25)",color:"rgba(255,255,255,.8)",borderRadius:5,padding:"4px 10px",fontSize:11,cursor:"pointer"}},"↓ Export JSON"),
+          e("button",{onClick:()=>jsonImportRef.current?.click(),style:{background:"none",border:"1px solid rgba(255,255,255,.25)",color:"rgba(255,255,255,.8)",borderRadius:5,padding:"4px 10px",fontSize:11,cursor:"pointer"}},"↑ Import JSON"),
+          e("div",{style:{width:1,height:20,background:"rgba(255,255,255,.2)",margin:"0 4px"}}),
+          e("button",{onClick:()=>setExportMode("onepage"),style:{background:"none",border:"1px solid rgba(255,255,255,.25)",color:"rgba(255,255,255,.8)",borderRadius:5,padding:"4px 10px",fontSize:11,cursor:"pointer"}},"One-pager PDF"),
+          e("button",{onClick:()=>setExportMode("full"),style:{background:"rgba(255,255,255,.15)",border:"1px solid rgba(255,255,255,.35)",color:"#fff",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}},"Full PDF export")
+        )
+      ),
+      e(Dashboard,{funds,
+        onSelect:id=>{setActiveFundId(id);setView("fund");},
+        onAddFund:f=>persist([...funds,f]),
+        onDelete:id=>{persist(funds.filter(f=>f.id!==id));showToast("Fund removed","info");},
+        onImport:persist,
+        showToast})
+    ),
+
+    view==="fund"&&activeFund&&e(FundView,{fund:activeFund,onUpdate:updateFund,onBack:()=>setView("dashboard"),showToast})
+  );
+}
+
+if(typeof ucapsGate==="function")ucapsGate();
+ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+</script>
+</body>
+</html>
