@@ -3,8 +3,8 @@
    ─── Edit the two lines below with your Supabase credentials ─
    ───────────────────────────────────────────────────────────── */
 
-const SUPABASE_URL  = 'YOUR_SUPABASE_URL_HERE';   // e.g. https://xyzabcdef.supabase.co
-const SUPABASE_ANON = 'YOUR_SUPABASE_ANON_KEY_HERE'; // from Settings → API
+const SUPABASE_URL  = 'https://hcqedahzjtksndaxeczd.supabase.co/rest/v1/';   // e.g. https://xyzabcdef.supabase.co
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhjcWVkYWh6anRrc25kYXhlY3pkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwMjcwMDIsImV4cCI6MjA5NjYwMzAwMn0.gB1fNlp4uMa04hVJt-BDKqg8zF7CPWqyYP7OFqGulxk'; // from Settings → API
 
 /* ─── password config ─────────────────────────────────────── */
 const ACCESS_PASSWORD = 'RIPSouthDining2026!';  // change this to your password
