@@ -23,6 +23,9 @@ body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); backgr
 .hdr h1 em{ font-style:italic; font-weight:500; color:#bcd9f2; }
 .hdr-meta{ margin-top:16px; font-size:13px; color:#cfe0ef; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .hdr-meta .dot{ opacity:.5; }
+.fy-value{ display:inline-block; min-width:46px; padding:1px 7px; border-radius:6px; border:1px dashed rgba(159,196,228,.45); color:#eaf3fb; font-weight:600; cursor:text; outline:none; transition:border-color .15s, background .15s; }
+.fy-value:hover{ border-color:rgba(159,196,228,.9); }
+.fy-value:focus{ border-style:solid; border-color:#9fc4e4; background:rgba(159,196,228,.14); }
 .savechip{ margin-left:6px; background:#1f6b43; color:#eafff2; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:600; opacity:0; transition:opacity .2s; }
 .savechip.show{ opacity:1; }
 
@@ -188,7 +191,7 @@ body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); backgr
     <div class="hdr-rule">UCard · Access &amp; Parking Services — Integrated Security</div>
     <h1>License &amp; Maintenance<br /><em>Renewal Tracker</em></h1>
     <div class="hdr-meta">
-      <span>Fiscal Year 2026</span><span class="dot">•</span><span id="today"></span>
+      <span class="fy-edit">Fiscal Year <span id="fy-label" class="fy-value" contenteditable="true" spellcheck="false" title="Click to change the fiscal year">2026</span></span>
       <span class="savechip" id="savechip">Saved</span>
     </div>
   </div>
@@ -227,7 +230,7 @@ body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); backgr
       <button class="btn solid" data-action="add">+ Add agreement</button>
       <button class="btn ghost" data-action="export">Export CSV</button>
       <button class="btn ghost" data-action="newcycle" title="Reset all statuses for a new renewal cycle — keeps terms, amounts and contacts">New cycle</button>
-      <button class="btn ghost" data-action="restore" title="Restore the original FY26 data — discards your edits">Restore FY26</button>
+      <button class="btn ghost" data-action="restore" title="Restore the original seed data — discards your edits">Restore Prior Year</button>
     </div>
   </section>
 
@@ -842,7 +845,7 @@ function newCycle(){
   }
 }
 function restoreFY26(){
-  if(confirm("Restore the original FY26 data?\n\nThis discards all of your edits and added agreements.")){
+  if(confirm("Restore the original prior-year data?\n\nThis discards all of your edits and added agreements.")){
     clearAttachmentBlobs();
     items=normalize(SEED.map(function(s){return JSON.parse(JSON.stringify(s));}));
     save(); closeDrawer(); renderAll();
@@ -899,7 +902,19 @@ document.addEventListener("input",function(ev){ if(ev.target.id==="search"){ ui.
 document.addEventListener("keydown",function(ev){ if(ev.key==="Escape"){ if(editing) cancelEdit(); else { closeDrawer(); closeEmail(); } } });
 
 /* ---- init ---- */
-document.getElementById("today").textContent=TODAY.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
+/* fiscal year label — editable, persisted to storage so it syncs across devices */
+var FY_KEY = STORAGE_KEY + "-fy";
+var fyEl = document.getElementById("fy-label");
+function saveFY(){
+  var val = (fyEl.textContent || "").trim().replace(/\s+/g," ");
+  if(!val){ val = "2026"; fyEl.textContent = val; }
+  storageSet(FY_KEY, val).then(function(){ flash("Saved"); });
+}
+fyEl.addEventListener("blur", saveFY);
+fyEl.addEventListener("keydown", function(ev){
+  if(ev.key === "Enter"){ ev.preventDefault(); fyEl.blur(); }
+});
+storageGet(FY_KEY).then(function(v){ if(v){ fyEl.textContent = String(v).trim(); } });
 document.getElementById("sel-status").innerHTML='<option value="All">All</option>'+STAGES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join("");
 Promise.resolve(load()).then(function(){ normalize(items); renderAll(); });
 
