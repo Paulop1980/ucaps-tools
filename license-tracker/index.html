@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -180,6 +179,7 @@ body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); backgr
 @media (max-width:520px){ .att-link-form.show{ grid-template-columns:1fr; } }
 .amt-prior{ color:#9a9281; }
 </style>
+<script src="../ucaps_shared.js"></script>
 </head>
 <body>
 <header class="hdr">
@@ -252,6 +252,23 @@ body{ margin:0; font-family:'IBM Plex Sans',sans-serif; color:var(--ink); backgr
 
 <script>
 "use strict";
+
+/* ---- hosted-site wiring: password gate + Supabase-backed window.storage ---- */
+if (typeof ucapsGate === "function") ucapsGate();
+if (typeof db !== "undefined" && !window.storage) {
+  window.storage = {
+    async get(key){
+      try { var v = await db.get(key); return (v!=null) ? { value: (typeof v==="string"? v : JSON.stringify(v)) } : null; }
+      catch(e){ return null; }
+    },
+    async set(key, value){
+      try { var parsed = (typeof value==="string") ? JSON.parse(value) : value; await db.set(key, parsed); return true; }
+      catch(e){ try { await db.set(key, value); return true; } catch(e2){ return false; } }
+    },
+    async delete(key){ try { if (db.del) await db.del(key); else if (db.delete) await db.delete(key); } catch(e){} },
+    async list(prefix){ return { keys: [] }; }
+  };
+}
 
 var STORAGE_KEY = "ucaps-license-tracker-html-v3";
 var STAGES = ["Not Started","Quote Requested","Quote Received","PO Submitted","Signed / Ordered","Paid"];
