@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>UCAPS FY27 Budget &amp; Renewal Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
 <script src="../ucaps_shared.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
@@ -305,6 +306,7 @@ a{ color:var(--lic); }
       <span class="savechip" id="savechip">Saved</span>
       <div class="hdr-actions">
         <button class="btn tiny" data-action="supervisor-summary">Supervisor Summary</button>
+        <button class="btn tiny" data-action="export-excel">Export Budget (Excel)</button>
         <button class="btn tiny" data-action="export-json">Export backup (JSON)</button>
         <button class="btn tiny" data-action="import-json">Import backup</button>
       </div>
@@ -1925,6 +1927,175 @@ function licExportCSV(){
 /* ============================================================
    FULL BACKUP — JSON export / import (all tabs + attachment blobs)
    ============================================================ */
+
+/* ============================================================
+   FORMATTED EXCEL EXPORT — mirrors the structure/layout of the
+   original FY budget draft workbook (Summary + Operating Budget by
+   category, with subtotals and a categorical grand-total footer, plus
+   a Part-Time Payroll Budget sheet), but pulls live figures from the
+   tracker and adds the Paid/Encumbered/Status columns the static
+   planning workbook never had.
+   ============================================================ */
+var XL_NAVY = "FF0A2240", XL_PAPER = "FFF4F1EA", XL_LINE = "FFE3DDD0",
+    XL_GREEN = "FF2F7D4F", XL_BLUE = "FF1F5D86", XL_AMBER = "FF9A5B00", XL_WHITE = "FFFFFFFF";
+function xlMoneyFmt(){ return '"$"#,##0.00'; }
+function xlStatusColor(status){
+  return status==="Paid" ? XL_GREEN : status==="Encumbrance" ? XL_BLUE : XL_AMBER;
+}
+function xlHeaderRow(ws, row, cells, fillColor, fontColor){
+  var r = ws.getRow(row);
+  cells.forEach(function(v, i){
+    var c = r.getCell(i+1);
+    c.value = v;
+    c.font = {bold:true, color:{argb:fontColor||XL_WHITE}, size:11};
+    c.fill = {type:"pattern", pattern:"solid", fgColor:{argb:fillColor}};
+    c.border = {bottom:{style:"thin", color:{argb:XL_LINE}}};
+  });
+  r.commit && r.commit();
+}
+function xlMoneyCell(ws, row, col, val){
+  var c = ws.getRow(row).getCell(col);
+  c.value = Number(val)||0;
+  c.numFmt = xlMoneyFmt();
+  return c;
+}
+async function exportBudgetExcel(){
+  if(typeof ExcelJS==="undefined"){ alert("Excel export library didn't load — check your connection and try again."); return; }
+  var wb = new ExcelJS.Workbook();
+  wb.creator = "UCAPS FY"+fy+" Budget & Renewal Tracker";
+  wb.created = new Date();
+
+  var opBase = Number(baseBudget.operating)||0;
+  var op = fundStats(budgetItems, function(b){return b.base;}, opBase, overrides.operating);
+  var opRequested = opRequestedTotal();
+  var payBase = Number(baseBudget.payroll)||0;
+  var pay = fundStats(payrollItems.concat(addlStaff||[]), function(p){return p.required;}, payBase, overrides.payroll);
+  var payRequested = (payrollItems.concat(addlStaff||[])).reduce(function(a,b){return a+(Number(b.requested)||0);},0);
+
+  /* ---------- Summary sheet ---------- */
+  var s = wb.addWorksheet("Summary");
+  s.columns = [{width:13},{width:9},{width:24},{width:14},{width:14},{width:14},{width:13},{width:14},{width:17},{width:20}];
+  s.getCell("A1").value = "UCAPS — FY"+fy+" Budget Summary";
+  s.getCell("A1").font = {bold:true, size:14, color:{argb:XL_NAVY}};
+  s.mergeCells("A1:D1");
+  s.getCell("A2").value = "Exported "+new Date().toLocaleDateString();
+  s.getCell("A2").font = {italic:true, size:9, color:{argb:"FF8B8472"}};
+  xlHeaderRow(s, 4, ["Account","Fund","Description","Required","Requested","Base Budget","Paid YTD","Encumbered","Surplus/Deficit","Surplus/Deficit w/ Requests"], XL_NAVY);
+  var opRow=5, payRow=6, totRow=7;
+  s.getCell(opRow,1).value="Operating"; s.getCell(opRow,2).value=51161; s.getCell(opRow,3).value="Operating Fund";
+  xlMoneyCell(s,opRow,4,op.required); xlMoneyCell(s,opRow,5,opRequested); xlMoneyCell(s,opRow,6,opBase);
+  xlMoneyCell(s,opRow,7,op.paid); xlMoneyCell(s,opRow,8,op.calcEnc);
+  xlMoneyCell(s,opRow,9,opBase-op.required); xlMoneyCell(s,opRow,10,opBase-op.required-opRequested);
+  s.getCell(payRow,1).value="Payroll"; s.getCell(payRow,2).value=52100; s.getCell(payRow,3).value="Gen Ops Contract Payroll";
+  xlMoneyCell(s,payRow,4,pay.required); xlMoneyCell(s,payRow,5,payRequested); xlMoneyCell(s,payRow,6,payBase);
+  xlMoneyCell(s,payRow,7,pay.paid); xlMoneyCell(s,payRow,8,pay.calcEnc);
+  xlMoneyCell(s,payRow,9,payBase-pay.required); xlMoneyCell(s,payRow,10,payBase-pay.required-payRequested);
+  s.getCell(totRow,3).value="Total"; s.getCell(totRow,3).font={bold:true};
+  [4,5,6,7,8,9,10].forEach(function(col){
+    xlMoneyCell(s,totRow,col, (Number(s.getCell(opRow,col).value)||0) + (Number(s.getCell(payRow,col).value)||0));
+    s.getCell(totRow,col).font = {bold:true};
+  });
+  s.getRow(totRow).eachCell(function(c){ c.border = {top:{style:"thin", color:{argb:XL_LINE}}}; });
+
+  /* ---------- Operating Budget sheet ---------- */
+  var o = wb.addWorksheet("Operating Budget");
+  o.columns = [{width:30},{width:13},{width:44},{width:12},{width:12},{width:28},{width:12},{width:13},{width:12}];
+  var row = 1;
+  CATEGORIES.forEach(function(cat){
+    var items = budgetItems.filter(function(b){ return b.category===cat; });
+    xlHeaderRow(o, row, [cat,"Base","Notes","Required","Requested","Internal Notes","Paid","Encumbered","Status"], XL_PAPER, XL_NAVY);
+    row++;
+    var catStart = row;
+    items.forEach(function(it){
+      var name = (it.vendor && it.vendor!=="—") ? it.vendor+" — "+it.item : it.item;
+      o.getCell(row,1).value = name;
+      xlMoneyCell(o,row,2,it.base);
+      o.getCell(row,3).value = it.notes||"";
+      xlMoneyCell(o,row,4,it.required);
+      xlMoneyCell(o,row,5,it.requested);
+      o.getCell(row,6).value = it.internalNotes||"";
+      xlMoneyCell(o,row,7,it.paid);
+      xlMoneyCell(o,row,8,it.encumbered);
+      var statCell = o.getCell(row,9); statCell.value = it.status;
+      statCell.font = {color:{argb:xlStatusColor(it.status)}, bold:true};
+      row++;
+    });
+    var catEnd = row-1;
+    o.getCell(row,1).value = "Subtotal"; o.getCell(row,1).font = {bold:true};
+    [2,4,5,7,8].forEach(function(col){
+      var colLetter = o.getColumn(col).letter;
+      var c = xlMoneyCell(o, row, col, items.reduce(function(a,it){
+        var f = col===2?"base":col===4?"required":col===5?"requested":col===7?"paid":"encumbered";
+        return a + (Number(it[f])||0);
+      },0));
+      c.font = {bold:true};
+    });
+    o.getRow(row).eachCell(function(c){ c.border = {top:{style:"thin", color:{argb:XL_LINE}}}; });
+    row+=2;
+  });
+
+  row++;
+  o.getCell(row,1).value = "Categorical Summary / Grand Total"; o.getCell(row,1).font = {bold:true, size:12, color:{argb:XL_NAVY}};
+  row++;
+  CATEGORIES.forEach(function(cat){
+    var t = catTotals(cat);
+    o.getCell(row,1).value = cat;
+    xlMoneyCell(o,row,2,t.base);
+    row++;
+  });
+  function summaryLine(label, val, bold){
+    o.getCell(row,1).value = label; if(bold) o.getCell(row,1).font={bold:true};
+    var c = xlMoneyCell(o,row,2,val); if(bold) c.font={bold:true};
+    row++;
+  }
+  row++;
+  summaryLine("Grand Total — Operating", op.required, true);
+  summaryLine("Base Operating Budget", opBase, false);
+  summaryLine("Surplus/Deficit", opBase-op.required, true);
+  row++;
+  summaryLine("Requests", opRequested, false);
+  summaryLine("Grand Total with Requests", op.required+opRequested, true);
+  summaryLine("Surplus/Deficit with Requests", opBase-op.required-opRequested, true);
+  row++;
+  summaryLine("Paid YTD", op.paid, false);
+  summaryLine("Encumbered", op.calcEnc, false);
+  summaryLine("Remaining Forecast", op.forecast, false);
+
+  /* ---------- Part-Time Payroll Budget sheet ---------- */
+  var p = wb.addWorksheet("Part-Time Payroll Budget");
+  p.columns = [{width:30},{width:13},{width:13},{width:44},{width:13},{width:13},{width:12}];
+  xlHeaderRow(p, 1, ["Personnel","Required","Requested","Notes","Paid","Encumbered","Status"], XL_NAVY);
+  var prow = 2;
+  payrollItems.concat(addlStaff||[]).forEach(function(it){
+    p.getCell(prow,1).value = it.label;
+    if(it.requiredIsText){ p.getCell(prow,2).value = String(it.required); }
+    else { xlMoneyCell(p,prow,2,it.required); }
+    xlMoneyCell(p,prow,3,it.requested);
+    p.getCell(prow,4).value = it.notes||"";
+    xlMoneyCell(p,prow,5,it.paid);
+    xlMoneyCell(p,prow,6,it.encumbered);
+    var sc = p.getCell(prow,7); sc.value = it.status; sc.font = {color:{argb:xlStatusColor(it.status)}, bold:true};
+    prow++;
+  });
+  p.getCell(prow,1).value = "Total:"; p.getCell(prow,1).font={bold:true};
+  [2,3,5,6].forEach(function(col){
+    var f = col===2?"required":col===3?"requested":col===5?"paid":"encumbered";
+    var c = xlMoneyCell(p, prow, col, payrollItems.concat(addlStaff||[]).reduce(function(a,it){ return a+(Number(it[f])||0); },0));
+    c.font = {bold:true};
+  });
+  p.getRow(prow).eachCell(function(c){ c.border = {top:{style:"thin", color:{argb:XL_LINE}}}; });
+  prow+=2;
+  p.getCell(prow,1).value = "FY"+fy+" Budget"; xlMoneyCell(p,prow,2,payBase); prow++;
+  p.getCell(prow,1).value = "Surplus/Deficit"; p.getCell(prow,1).font={bold:true};
+  xlMoneyCell(p,prow,2,payBase-pay.required).font={bold:true};
+
+  var buf = await wb.xlsx.writeBuffer();
+  var blob = new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  var a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="UCAPS_FY"+fy+"_Budget_"+new Date().toISOString().slice(0,10)+".xlsx";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },4000);
+}
 async function exportJSON(){
   var blobs={};
   for(var k=0;k<licItems.length;k++){
@@ -2286,6 +2457,7 @@ document.addEventListener("click",function(ev){
     else if(act==="copy"){ doCopy(); }
     else if(act==="mailto"){ doMailto(t); }
     else if(act==="lic-export-csv"){ licExportCSV(); }
+    else if(act==="export-excel"){ exportBudgetExcel(); }
     else if(act==="export-json"){ exportJSON(); }
     else if(act==="import-json"){ triggerJSONImport(); }
     else if(act==="supervisor-summary"){ openSupervisorSummary(); }
