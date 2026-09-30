@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UCAPS Register Tracker</title>
+<style>
+:root{
+  --bg:#f4f6f9;--panel:#ffffff;--panel2:#f8fafc;--line:#e2e7ee;--ink:#17202b;--muted:#5f6b7a;--faint:#8a95a3;
+  --accent:#0067b1;--accent-ink:#ffffff;--accent-soft:#e6f0f9;
+  --ok:#1e8a4c;--ok-soft:#e5f5ec;--bad:#c8102e;--bad-soft:#fbe8eb;--warn:#b86e00;--warn-soft:#fdf2e0;--na:#6b7684;--na-soft:#eef1f4;
+  --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.08);
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f141a;--panel:#171e26;--panel2:#1c242e;--line:#2a3441;--ink:#e6ebf1;--muted:#9aa6b4;--faint:#6f7b89;
+  --accent:#3f9be0;--accent-ink:#06121d;--accent-soft:#16304a;
+  --ok:#43c07a;--ok-soft:#16301f;--bad:#f0647a;--bad-soft:#3a1a21;--warn:#e6a23c;--warn-soft:#3a2c13;--na:#9aa6b4;--na-soft:#242d38;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}}
+:root[data-theme="dark"]{
+  --bg:#0f141a;--panel:#171e26;--panel2:#1c242e;--line:#2a3441;--ink:#e6ebf1;--muted:#9aa6b4;--faint:#6f7b89;
+  --accent:#3f9be0;--accent-ink:#06121d;--accent-soft:#16304a;
+  --ok:#43c07a;--ok-soft:#16301f;--bad:#f0647a;--bad-soft:#3a1a21;--warn:#e6a23c;--warn-soft:#3a2c13;--na:#9aa6b4;--na-soft:#242d38;
+  --shadow:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+header.top{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line)}
+.topin{max-width:1280px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;letter-spacing:-.01em}
+.brand .mark{width:28px;height:28px;border-radius:7px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-size:14px}
+.brand small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
+nav.tabs{display:flex;gap:2px;margin-left:auto;flex-wrap:wrap}
+nav.tabs button{border:0;background:none;padding:8px 12px;border-radius:8px;color:var(--muted);cursor:pointer;font-weight:600}
+nav.tabs button:hover{background:var(--panel2);color:var(--ink)}
+nav.tabs button.on{background:var(--accent-soft);color:var(--accent)}
+nav.tabs .count[hidden]{display:none}
+nav.tabs .count{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;margin-left:5px;text-align:center}
+main{max-width:1280px;margin:0 auto;padding:18px 16px 60px}
+h2{font-size:18px;margin:0 0 4px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
+.pad{padding:16px}
+.grid{display:grid;gap:12px}
+.kpis{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:16px}
+.kpi{padding:14px 16px;cursor:pointer;transition:border-color .15s}
+.kpi:hover{border-color:var(--accent)}
+.kpi .lab{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi .val{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .hint{font-size:12px;color:var(--faint)}
+.kpi.bad .val{color:var(--bad)}.kpi.warn .val{color:var(--warn)}.kpi.ok .val{color:var(--ok)}
+.two{grid-template-columns:1.2fr 1fr}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.sect-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line);font-weight:700}
+.sect-h span{font-weight:500;color:var(--muted);font-size:12px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;gap:10px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);cursor:pointer}
+.list li:last-child{border-bottom:0}
+.list li:hover{background:var(--panel2)}
+.list .grow{flex:1;min-width:0}
+.list .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list .d{color:var(--muted);font-size:12px}
+.empty{padding:22px 16px;color:var(--muted);text-align:center}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap;background:var(--na-soft);color:var(--na)}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}.chip.bad{background:var(--bad-soft);color:var(--bad)}.chip.warn{background:var(--warn-soft);color:var(--warn)}.chip.acc{background:var(--accent-soft);color:var(--accent)}
+.bar{height:8px;background:var(--na-soft);border-radius:4px;overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bld{display:grid;grid-template-columns:minmax(120px,1fr) 2fr 60px;gap:10px;align-items:center;padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px}
+.bld:last-child{border-bottom:0}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.toolbar .sp{flex:1}
+input[type=text],input[type=email],input[type=search],input[type=date],input[type=number],select,textarea{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+textarea{width:100%;resize:vertical}
+.btn{border:1px solid var(--line);background:var(--panel);padding:7px 12px;border-radius:8px;cursor:pointer;font-weight:600;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.pri:hover{filter:brightness(1.07)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:4px 9px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:default}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.03em;background:var(--panel2);position:sticky;top:0;cursor:pointer;user-select:none;white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--panel2)}
+td .t{font-weight:600}
+td .d{color:var(--muted);font-size:12px}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+.tablewrap{overflow:auto;max-height:calc(100vh - 220px)}
+.hide-sm{}
+@media (max-width:760px){.hide-sm{display:none}}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(10,15,22,.45);z-index:40;display:none}
+.scrim.on{display:block}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(720px,100%);background:var(--bg);z-index:50;transform:translateX(100%);transition:transform .2s ease;display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.15)}
+.drawer.on{transform:none}
+.dh{background:var(--panel);border-bottom:1px solid var(--line);padding:14px 16px}
+.dh .row{display:flex;align-items:flex-start;gap:10px}
+.dh h3{margin:0;font-size:17px;flex:1}
+.dh .meta{color:var(--muted);font-size:12px;margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.dtabs{display:flex;gap:2px;margin-top:10px;flex-wrap:wrap}
+.dtabs button{border:0;background:none;padding:6px 10px;border-radius:7px;cursor:pointer;color:var(--muted);font-weight:600}
+.dtabs button.on{background:var(--accent-soft);color:var(--accent)}
+.db{flex:1;overflow:auto;padding:14px 16px}
+.df{background:var(--panel);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+fieldset{border:1px solid var(--line);border-radius:var(--r);background:var(--panel);margin:0 0 12px;padding:10px 14px 14px}
+legend{font-weight:700;padding:0 6px;font-size:13px}
+.fgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+@media (max-width:560px){.fgrid{grid-template-columns:1fr}}
+.fgrid label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600}
+.fgrid label.full{grid-column:1/-1}
+.fgrid label input,.fgrid label select,.fgrid label textarea{color:var(--ink);font-weight:400;font-size:14px}
+.fgrid label.changed input,.fgrid label.changed textarea,.fgrid label.changed select{border-color:var(--warn);background:var(--warn-soft)}
+.warnbox{border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:13px}
+.warnbox b{color:var(--warn)}
+.tl{list-style:none;margin:0;padding:0}
+.tl li{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:8px}
+.tl .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.tl .h b{flex:1}
+.tl .when{color:var(--muted);font-size:12px}
+.tl .items{margin:8px 0 0;padding:0;list-style:none;font-size:13px}
+.tl .items li{border:0;padding:2px 0;margin:0;background:none;display:flex;gap:8px}
+.chg{font-size:13px;margin-top:4px}
+.chg del{color:var(--bad);text-decoration:line-through;opacity:.8}
+.chg ins{color:var(--ok);text-decoration:none}
+/* modal */
+.modal{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:16px;background:rgba(10,15,22,.5)}
+.modal.on{display:flex}
+.mbox{background:var(--bg);border-radius:14px;width:min(640px,100%);max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.mh{padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line);border-radius:14px 14px 0 0}
+.mh h3{margin:0;font-size:16px}
+.mh div{color:var(--muted);font-size:12px}
+.mb{padding:14px 18px;overflow:auto;flex:1}
+.mf{padding:10px 18px;background:var(--panel);border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;border-radius:0 0 14px 14px;flex-wrap:wrap;align-items:center}
+.chk{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.chk.pass{border-color:var(--ok)}.chk.fail{border-color:var(--bad)}
+.chk .top{display:flex;align-items:center;gap:10px}
+.chk .top span{flex:1;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+.seg button{border:0;background:var(--panel);padding:6px 11px;cursor:pointer;font-weight:700;font-size:12px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button.on[data-v=pass]{background:var(--ok);color:#fff}
+.seg button.on[data-v=fail]{background:var(--bad);color:#fff}
+.seg button.on[data-v=na]{background:var(--na);color:#fff}
+.chk input.note{width:100%;margin-top:8px;display:none}
+.chk.fail input.note,.chk.hasnote input.note{display:block}
+.row2{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.row2 label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600;flex:1;min-width:160px}
+.prog{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.prog .bar{flex:1;height:12px;border-radius:6px}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:9px;font-weight:600;z-index:80;transition:transform .2s;box-shadow:var(--shadow)}
+.toast.on{transform:translateX(-50%)}
+.set-grid{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.small{font-size:12px;color:var(--muted)}
+a{color:var(--accent)}
+.iss-status{min-width:80px}
+.dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;background:var(--na)}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--bad)}.dot.warn{background:var(--warn)}
+@media print{
+  header.top,.toolbar,.btn,.drawer,.scrim,.modal,nav{display:none!important}
+  body{background:#fff;color:#000}
+  .card{box-shadow:none;border-color:#ccc}
+  .tablewrap{max-height:none;overflow:visible}
+  main{padding:0}
+}
+
+.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.who .live{font-size:10px;color:var(--faint)}
+.who .live.on{color:var(--ok)}
+.login{max-width:420px;margin:48px auto}
+[hidden]{display:none!important}
+textarea{font-weight:400}
+</style>
+</head>
+<body>
+<header class="top"><div class="topin">
+  <div class="brand"><div class="mark">$</div><div>UCAPS Register Tracker<small>UCard cash registers, OTC kiosks &amp; card terminals</small></div></div>
+  <nav class="tabs" id="nav" hidden>
+    <button data-v="dash" class="on">Dashboard</button>
+    <button data-v="devices">Registers</button>
+    <button data-v="round">Test round</button>
+    <button data-v="issues">Issues<span class="count" id="issCount" hidden></span></button>
+    <button data-v="data">Data &amp; settings</button>
+  </nav>
+  <div class="who" id="who" hidden><span id="whoName"></span><span class="live" id="live" title="Live sync">●</span><button class="btn sm" id="signOut">Sign out</button></div>
+</div></header>
+<main id="main"><div class="empty">Loading…</div></main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Device details"></aside>
+<div class="modal" id="modal"><div class="mbox" id="mbox"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileIn" hidden>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+"use strict";
+/* Public project URL + publishable key. Safe to ship: every table is locked by row-level security
+   to signed-in users on the approved list (reg_users). */
+const SUPABASE_URL = "https://hcqedahzjtksndaxeczd.supabase.co";
+const SUPABASE_KEY = "sb_publishable_CeEkIIgVUc0WUJtZ8c7zwA_Y6j1Rhi_";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true,detectSessionInUrl:true,flowType:"pkce"}});
+
+/* ---------- field model (matches the source CSV columns) ---------- */
+const COLS = ["Register Location/Name","Campus","Building","Floor","Room","Serial Number (S/N)","Heartland/Touchnet Asset Tag","UML Asset Tag","Cash Drawer Key","Patron Display Type","Barcode Scanner Asset Tag or Serial","MAC Address","IP Address","Receipt Printer IP Address","Receipt Printer MAC Address","GrubHub Printer IP Address","GrubHub Printer MAC Address","Operating System","pcProx Firmware","UPS Battery Replacement Date","Computer Name","Login Name","Notes","Last Edited Date","x","y"];
+const GROUPS = [
+  ["Location",["Register Location/Name","Campus","Building","Floor","Room"]],
+  ["Hardware & asset tags",["Serial Number (S/N)","Heartland/Touchnet Asset Tag","UML Asset Tag","Cash Drawer Key","Patron Display Type","Barcode Scanner Asset Tag or Serial","UPS Battery Replacement Date"]],
+  ["Network",["IP Address","MAC Address","Receipt Printer IP Address","Receipt Printer MAC Address","GrubHub Printer IP Address","GrubHub Printer MAC Address"]],
+  ["Software & login",["Computer Name","Login Name","Operating System","pcProx Firmware"]],
+  ["Notes",["Notes"]],
+  ["Map position (ArcGIS Web Mercator)",["x","y"]]
+];
+const DATE_FIELDS = new Set(["UPS Battery Replacement Date","Last Edited Date"]);
+const LONG_FIELDS = new Set(["Notes","Register Location/Name"]);
+const TYPES = {pos:"POS register",otc:"OTC kiosk",terminal:"Card terminal",printer:"Printer"};
+const DEFAULT_CHECKLISTS = {
+  pos:["Powers on and boots to Windows login","Register account logs in; POS software opens","Network: IP responds / POS reaches server","UCard swipe and pcProx tap read a test card","Barcode scanner reads a test barcode","Cash drawer opens on sale; key locks it","Receipt printer prints a test receipt","GrubHub printer online (if equipped)","Patron display shows the transaction","Test transaction posts, then voids cleanly","UPS: no alarms, runs on battery briefly","Tamper check: no overlays/skimmers, seals & asset tags intact"],
+  otc:["Powers on; OTC app loads","Network connected","Card reader reads a test card","Receipt / order printer online","Test transaction posts, then voids","Tamper check: no overlays/skimmers, asset tag present"],
+  terminal:["Powers on with no error on screen","Terminal ID matches record","PIN pad / keypad responds to every key","Test sale and void (or $0 auth) succeed","Receipt printer prints","Network reachable","Tamper check: seals intact, no overlay/skimmer","Serial on device matches record"],
+  printer:["Powers on, no error lights","Network reachable at recorded IP","Test page prints cleanly","Paper stocked / spare roll on hand"]
+};
+const DEFAULT_SETTINGS = {intervalDays:90,upsYears:3,staleDays:365,checklists:DEFAULT_CHECKLISTS};
+
+/* ---------- utils ---------- */
+const $ = (s,el=document)=>el.querySelector(s);
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = ()=>crypto.randomUUID();
+const nowISO = ()=>new Date().toISOString();
+const DAY = 86400000;
+function parseAnyDate(s){
+  if(!s) return null; s=String(s).trim();
+  let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+(\d{1,2}):(\d{2})\s*(AM|PM)?)?/i);
+  if(m){let h=+(m[4]||0);if(m[6]){const pm=m[6].toUpperCase()==="PM";if(h===12)h=pm?12:0;else if(pm)h+=12;}return new Date(+m[3],+m[1]-1,+m[2],h,+(m[5]||0));}
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/);
+  if(m){ if(s.length>10){const d=new Date(s); if(!isNaN(d)) return d;} return new Date(+m[1],+m[2]-1,+m[3]); }
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+function toCsvDate(d){ if(!d) return ""; let h=d.getHours(),ap=h>=12?"PM":"AM";h=h%12||12;return `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}, ${h}:${String(d.getMinutes()).padStart(2,"0")} ${ap}`; }
+function toInputDate(d){ if(!d) return ""; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function fmtDate(d){ d=d instanceof Date?d:parseAnyDate(d); if(!d) return "—"; return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"}); }
+function fmtDT(d){ d=d instanceof Date?d:parseAnyDate(d); if(!d) return "—"; return d.toLocaleString(undefined,{month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit"}); }
+function ago(d){ d=d instanceof Date?d:parseAnyDate(d); if(!d) return "never"; const days=Math.floor((Date.now()-d)/DAY); if(days<1) return "today"; if(days===1) return "yesterday"; if(days<60) return days+" days ago"; const mo=Math.round(days/30.4); if(mo<24) return mo+" mo ago"; return (days/365).toFixed(1)+" yr ago"; }
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("on"),2600); }
+function download(name,text,type="text/plain"){ const b=new Blob([text],{type}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500); }
+function csvCell(v){ v=String(v??""); return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function parseCSV(text){
+  text=text.replace(/^﻿/,""); const rows=[]; let row=[],cell="",q=false;
+  for(let i=0;i<text.length;i++){const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else if(c==='"') q=true; else if(c===","){row.push(cell);cell="";} else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n")i++; row.push(cell);rows.push(row);row=[];cell=""; } else cell+=c; }
+  if(cell!==""||row.length){row.push(cell);rows.push(row);}
+  return rows.filter(r=>r.some(c=>c.trim()!==""));
+}
+const today = ()=>toInputDate(new Date());
+
+/* ---------- auth ---------- */
+let ME=null; // {email,name,is_admin}
+const myName = ()=>ME?(ME.name||ME.email):"—";
+function showLogin(msg){
+  $("#nav").hidden=true; $("#who").hidden=true;
+  $("#main").innerHTML=`<div class="card pad login"><h2>Sign in</h2><p class="sub">Enter your email and we'll send you a one-time sign-in link. Only approved UCAPS staff can see register data.</p>
+    ${msg?`<div class="warnbox">${msg}</div>`:""}
+    <form id="loginF"><input type="email" id="loginE" required placeholder="you@uml.edu" autocomplete="email" style="width:100%;margin-bottom:10px"><button class="btn pri" style="width:100%">Email me a sign-in link</button></form></div>`;
+  $("#loginF").onsubmit=async e=>{ e.preventDefault(); const email=$("#loginE").value.trim().toLowerCase(); const btn=e.target.querySelector("button"); btn.disabled=true; btn.textContent="Sending…";
+    const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname}});
+    if(error){ btn.disabled=false; btn.textContent="Email me a sign-in link"; toast(error.message); return; }
+    $("#main").innerHTML=`<div class="card pad login"><h2>Check your email</h2><p class="sub">We sent a sign-in link to <b>${esc(email)}</b>. Open it on this device. You can close this tab.</p></div>`; };
+}
+async function boot(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){ showLogin(); return; }
+  const email=(session.user.email||"").toLowerCase();
+  const {data,error}=await sb.from("reg_users").select("*").eq("email",email).maybeSingle();
+  if(error||!data){ $("#nav").hidden=true; $("#who").hidden=false; $("#whoName").textContent=email;
+    $("#main").innerHTML=`<div class="card pad login"><h2>Not on the approved list</h2><p class="sub"><b>${esc(email)}</b> is signed in but hasn't been approved for the Register Tracker. Ask a UCAPS admin to add you under Data &amp; settings → Approved users.</p></div>`; return; }
+  ME=data; $("#nav").hidden=false; $("#who").hidden=false; $("#whoName").textContent=myName();
+  await loadAll(); render(); subscribe();
+}
+$("#signOut").onclick=async()=>{ await sb.auth.signOut(); location.reload(); };
+sb.auth.onAuthStateChange((ev)=>{ if(ev==="SIGNED_IN" && !ME) boot(); });
+
+/* ---------- data layer ---------- */
+let S={devices:[],settings:DEFAULT_SETTINGS,round:null,pastRounds:[],users:[]};
+async function loadAll(){
+  const q=(t,o)=>sb.from(t).select("*").order(o||"id").range(0,9999);
+  const [dv,ts,is,hs,st,rd,us]=await Promise.all([q("reg_devices","created_at"),q("reg_tests","tested_at"),q("reg_issues","opened_at"),q("reg_history","at"),sb.from("reg_settings").select("*").eq("id",1).maybeSingle(),q("reg_rounds","started_at"),q("reg_users","email")]);
+  const err=[dv,ts,is,hs,st,rd,us].find(r=>r.error); if(err){ toast("Load failed: "+err.error.message); return; }
+  const by=(rows,k)=>{const m={};rows.forEach(r=>(m[r[k]]=m[r[k]]||[]).push(r));return m;};
+  const T=by(ts.data,"device_id"), I=by(is.data,"device_id"), H=by(hs.data,"device_id");
+  S.devices=dv.data.map(r=>({id:r.id,type:r.type,active:r.active,f:Object.fromEntries(COLS.map(c=>[c,(r.fields||{})[c]??""])),
+    tests:(T[r.id]||[]).map(t=>({id:t.id,at:t.tested_at,by:t.tested_by,result:t.result,items:t.items||[],notes:t.notes||""})),
+    issues:(I[r.id]||[]).map(i=>({id:i.id,at:i.opened_at,by:i.opened_by,title:i.title,detail:i.detail||"",priority:i.priority,ticket:i.ticket||"",status:i.status,resolvedAt:i.resolved_at,testId:i.test_id,log:i.log||[]})),
+    history:(H[r.id]||[]).map(h=>({at:h.at,by:h.by,kind:h.kind,note:h.note,changes:h.changes}))}));
+  const s=(st.data&&st.data.data)||{};
+  S.settings={...DEFAULT_SETTINGS,...s,checklists:{...DEFAULT_CHECKLISTS,...(s.checklists||{})}};
+  const openR=rd.data.find(r=>!r.ended_at);
+  S.round=openR?{id:openR.id,name:openR.name,started:openR.started_at,...openR.scope}:null;
+  S.pastRounds=rd.data.filter(r=>r.ended_at).map(r=>({name:r.name,started:r.started_at,ended:r.ended_at,...(r.summary||{})}));
+  S.users=us.data;
+  const me=us.data.find(u=>u.email===ME.email); if(me) ME=me; else { location.reload(); }
+}
+async function run(p, okMsg){ const {error}=await p; if(error){ toast("Couldn't save: "+error.message); await loadAll(); refresh(); return false; } if(okMsg) toast(okMsg); return true; }
+const devRow = d=>({id:d.id,type:d.type,active:d.active,fields:d.f,updated_at:nowISO()});
+const histRow = (d,h)=>({device_id:d.id,at:h.at,by:h.by,kind:h.kind,note:h.note||null,changes:h.changes||null});
+const testRow = (d,t)=>({id:t.id,device_id:d.id,tested_at:t.at,tested_by:t.by,result:t.result,items:t.items,notes:t.notes||null});
+const issRow = (d,i)=>({id:i.id,device_id:d.id,test_id:i.testId||null,opened_at:i.at,opened_by:i.by,title:i.title,detail:i.detail||null,priority:i.priority||"normal",ticket:i.ticket||null,status:i.status,resolved_at:i.resolvedAt||null,log:i.log||[]});
+async function addHistory(d,h){ d.history.push(h); return run(sb.from("reg_history").insert(histRow(d,h))); }
+
+/* live sync: other people's changes arrive here; re-load quietly unless someone is mid-edit */
+let reloadT=null, pending=false, suppressUntil=0;
+function subscribe(){
+  const ch=sb.channel("reg-live");
+  ["reg_devices","reg_tests","reg_issues","reg_history","reg_settings","reg_rounds","reg_users"].forEach(t=>ch.on("postgres_changes",{event:"*",schema:"public",table:t},()=>{ clearTimeout(reloadT); reloadT=setTimeout(liveReload,700); }));
+  ch.subscribe(st=>{ const l=$("#live"); l.classList.toggle("on",st==="SUBSCRIBED"); l.title=st==="SUBSCRIBED"?"Live: changes from your team appear automatically":"Live sync "+st.toLowerCase(); });
+}
+async function liveReload(){
+  if($("#modal").classList.contains("on") || (cur && curTab==="details" && dirty())){ pending=true; return; }
+  pending=false; await loadAll(); refresh();
+}
+function refresh(){ if(cur){ cur=S.devices.find(d=>d.id===cur.id)||null; if(cur) drawDrawer(); else closeDrawer(true); } render(); }
+function flushPending(){ if(pending) liveReload(); }
+
+/* ---------- derived status ---------- */
+const nm = d=>d.f["Register Location/Name"]||"(unnamed)";
+function lastTest(d){ return d.tests.length? d.tests.reduce((a,b)=>a.at>b.at?a:b):null; }
+function openIssues(d){ return d.issues.filter(i=>i.status!=="resolved"); }
+function testState(d){
+  const t=lastTest(d); if(!t) return {k:"never",label:"Never tested",cls:"warn"};
+  const age=(Date.now()-parseAnyDate(t.at))/DAY;
+  if(t.result==="fail") return {k:"fail",label:"Failed "+ago(t.at),cls:"bad",t};
+  if(age>S.settings.intervalDays) return {k:"due",label:"Due · "+ago(t.at),cls:"warn",t};
+  return {k:"ok",label:"Passed "+ago(t.at),cls:"ok",t};
+}
+function upsDue(d){ const u=parseAnyDate(d.f["UPS Battery Replacement Date"]); if(!u) return false; return (Date.now()-u)/DAY > S.settings.upsYears*365; }
+function stale(d){ const u=parseAnyDate(d.f["Last Edited Date"]); return !u || (Date.now()-u)/DAY > S.settings.staleDays; }
+const IP_RE=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const MAC_RE=/^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
+function dataWarnings(d, all){
+  const w=[], f=d.f;
+  const ipLike=v=>v && v.toUpperCase()!=="DHCP";
+  ["IP Address","Receipt Printer IP Address","GrubHub Printer IP Address"].forEach(k=>{ const v=f[k]; if(ipLike(v) && !IP_RE.test(v) && d.type!=="terminal") w.push(`${k} “${v}” isn't a plain IPv4 address`); });
+  ["MAC Address","Receipt Printer MAC Address","GrubHub Printer MAC Address"].forEach(k=>{ const v=f[k]; if(v && !MAC_RE.test(v)) w.push(`${k} “${v}” doesn't look like a MAC address`); });
+  if(d.type==="pos"){ if(!f["IP Address"]) w.push("No IP address recorded"); if(!f["Cash Drawer Key"]) w.push("No cash drawer key recorded"); if(!f["Login Name"]) w.push("No login name recorded"); }
+  if(f["GrubHub Printer MAC Address"] && !f["GrubHub Printer IP Address"]) w.push("GrubHub printer has a MAC but no IP / DHCP noted");
+  const vals=(o,mac)=>[o.f["IP Address"],o.f["Receipt Printer IP Address"],o.f["GrubHub Printer IP Address"]].concat(mac?[o.f["MAC Address"],o.f["Receipt Printer MAC Address"],o.f["GrubHub Printer MAC Address"]]:[]);
+  const dupCheck=(k,label)=>{ const v=(f[k]||"").trim(); if(!v || v.toUpperCase()==="DHCP") return; const other=all.filter(o=>o!==d && o.active && vals(o,k.includes("MAC")).some(x=>(x||"").trim().toUpperCase()===v.toUpperCase())); if(other.length) w.push(`${label} ${v} also used by ${other.map(nm).join(", ")}`); };
+  ["IP Address","Receipt Printer IP Address","GrubHub Printer IP Address","MAC Address","Receipt Printer MAC Address","GrubHub Printer MAC Address"].forEach(k=>dupCheck(k,k.replace(" Address","")));
+  const sn=(f["Serial Number (S/N)"]||"").replace(/^S\/N\s*-\s*/i,"").trim();
+  if(sn){ const o=all.filter(x=>x!==d&&x.active&&(x.f["Serial Number (S/N)"]||"").replace(/^S\/N\s*-\s*/i,"").trim()===sn); if(o.length) w.push(`Serial ${sn} also on ${o.map(nm).join(", ")}`); }
+  if(upsDue(d)) w.push(`UPS battery last replaced ${fmtDate(f["UPS Battery Replacement Date"])} — older than ${S.settings.upsYears} years`);
+  if(stale(d)) w.push(`Record not edited since ${fmtDate(f["Last Edited Date"])}`);
+  return w;
+}
+function mapLink(d){ const x=parseFloat(d.f.x), y=parseFloat(d.f.y); if(!isFinite(x)||!isFinite(y)) return ""; const R=6378137; const lon=x/R*180/Math.PI; const lat=(2*Math.atan(Math.exp(y/R))-Math.PI/2)*180/Math.PI; return `https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`; }
+const active=()=>S.devices.filter(d=>d.active);
+
+/* ---------- routing ---------- */
+let view="dash"; const UI={q:"",campus:"",bldg:"",type:"",status:"",sort:"name",dir:1,issFilter:"open"};
+function go(v,preset){ view=v; if(preset) Object.assign(UI,preset); document.querySelectorAll("#nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); render(); window.scrollTo(0,0); }
+$("#nav").addEventListener("click",e=>{ const b=e.target.closest("button"); if(b) go(b.dataset.v); });
+function render(){
+  if(!ME) return;
+  const n=active().reduce((a,d)=>a+openIssues(d).length,0); const c=$("#issCount"); c.hidden=!n; c.textContent=n;
+  ({dash:renderDash,devices:renderDevices,round:renderRound,issues:renderIssues,data:renderData})[view]();
+}
+
+/* ---------- dashboard ---------- */
+function renderDash(){
+  const A=active(); const st=A.map(d=>testState(d));
+  const cnt=k=>st.filter(s=>s.k===k).length;
+  const iss=A.reduce((a,d)=>a+openIssues(d).length,0);
+  const ups=A.filter(upsDue).length;
+  const withWarn=A.filter(d=>dataWarnings(d,A).some(w=>!/UPS|not edited/.test(w))).length;
+  const pct=A.length?Math.round(cnt("ok")/A.length*100):0;
+  const rank={fail:0,due:1,never:2};
+  const attention=A.map(d=>({d,s:testState(d),i:openIssues(d).length})).filter(x=>x.s.k!=="ok"||x.i).sort((a,b)=>(rank[a.s.k]??3)-(rank[b.s.k]??3)||b.i-a.i);
+  const recent=[]; A.forEach(d=>d.tests.forEach(t=>recent.push({d,t}))); recent.sort((a,b)=>a.t.at<b.t.at?1:-1);
+  const byB={}; A.forEach(d=>{const b=d.f.Building||"—"; byB[b]=byB[b]||{ok:0,bad:0,other:0,n:0}; const s=testState(d).k; byB[b].n++; if(s==="ok")byB[b].ok++; else if(s==="fail")byB[b].bad++; else byB[b].other++;});
+  $("#main").innerHTML=`
+  <h2>Fleet overview</h2><p class="sub">${A.length} active devices across ${Object.keys(byB).length} buildings · tests are due every ${S.settings.intervalDays} days${S.round?` · <b>Round “${esc(S.round.name)}” in progress</b>`:""}</p>
+  <div class="grid kpis">
+    <div class="card kpi ${pct>=90?"ok":pct>=50?"":"warn"}" data-go="devices" data-st="ok"><div class="lab">Tested &amp; current</div><div class="val">${pct}%</div><div class="hint">${cnt("ok")} of ${A.length} passed within ${S.settings.intervalDays} days</div></div>
+    <div class="card kpi ${cnt("fail")?"bad":""}" data-go="devices" data-st="fail"><div class="lab">Failed last test</div><div class="val">${cnt("fail")}</div><div class="hint">Need follow-up</div></div>
+    <div class="card kpi ${cnt("due")+cnt("never")?"warn":""}" data-go="devices" data-st="due"><div class="lab">Due / never tested</div><div class="val">${cnt("due")+cnt("never")}</div><div class="hint">${cnt("never")} never tested</div></div>
+    <div class="card kpi ${iss?"bad":""}" data-go="issues"><div class="lab">Open issues</div><div class="val">${iss}</div><div class="hint">Across all devices</div></div>
+    <div class="card kpi ${ups?"warn":""}" data-go="devices" data-st="ups"><div class="lab">UPS batteries due</div><div class="val">${ups}</div><div class="hint">Older than ${S.settings.upsYears} years</div></div>
+    <div class="card kpi ${withWarn?"warn":""}" data-go="devices" data-st="data"><div class="lab">Record gaps</div><div class="val">${withWarn}</div><div class="hint">Missing / duplicate / malformed data</div></div>
+  </div>
+  <div class="grid two">
+    <div class="card"><div class="sect-h">Needs attention <span>${attention.length} device${attention.length===1?"":"s"}</span></div>
+      <ul class="list">${attention.slice(0,12).map(x=>`<li data-open="${x.d.id}"><span class="dot ${x.s.cls}"></span><div class="grow"><div class="t">${esc(nm(x.d))}</div><div class="d">${esc(x.d.f.Building)} · ${TYPES[x.d.type]}</div></div>${x.i?`<span class="chip bad">${x.i} issue${x.i>1?"s":""}</span>`:""}<span class="chip ${x.s.cls}">${esc(x.s.label)}</span></li>`).join("")||`<div class="empty">Everything is tested and clear.</div>`}
+      ${attention.length>12?`<li data-go="devices" data-st="due"><div class="grow d">+ ${attention.length-12} more…</div></li>`:""}</ul></div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><div class="sect-h">By building <span>passed · failed · due</span></div>
+        ${Object.entries(byB).sort().map(([b,v])=>`<div class="bld"><div>${esc(b)}</div><div class="bar"><i style="width:${v.ok/v.n*100}%;background:var(--ok)"></i><i style="width:${v.bad/v.n*100}%;background:var(--bad)"></i><i style="width:${v.other/v.n*100}%;background:var(--warn);opacity:.55"></i></div><div class="small" style="text-align:right">${v.ok}/${v.n}</div></div>`).join("")}
+      </div>
+      <div class="card"><div class="sect-h">Recent tests</div>
+        <ul class="list">${recent.slice(0,6).map(x=>`<li data-open="${x.d.id}" data-tab="tests"><span class="dot ${x.t.result==="pass"?"ok":"bad"}"></span><div class="grow"><div class="t">${esc(nm(x.d))}</div><div class="d">${fmtDT(x.t.at)} · ${esc(x.t.by||"—")}</div></div><span class="chip ${x.t.result==="pass"?"ok":"bad"}">${x.t.result==="pass"?"Pass":"Fail"}</span></li>`).join("")||`<div class="empty">No tests logged yet. Open a register and hit <b>Run test</b>, or start a test round.</div>`}</ul>
+      </div>
+    </div>
+  </div>`;
+}
+$("#main").addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]"); if(g){ const p={}; if(g.dataset.st!==undefined){p.status=g.dataset.st;p.q="";p.campus="";p.bldg="";p.type="";} go(g.dataset.go,p); return; }
+  const o=e.target.closest("[data-open]"); if(o && !e.target.closest("button,select,input") && !(e.target.closest("a")&&!e.target.closest("a[data-open]"))){ e.preventDefault(); openDrawer(o.dataset.open,o.dataset.tab||"details"); }
+});
+
+/* ---------- devices list ---------- */
+function renderDevices(){
+  const A=active(); const uniq=k=>[...new Set(A.map(d=>d.f[k]).filter(Boolean))].sort();
+  const keepFocus=document.activeElement&&document.activeElement.id==="q";
+  $("#main").innerHTML=`
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search name, IP, MAC, serial, login…" value="${esc(UI.q)}" style="flex:1;min-width:200px">
+    <select id="fCampus"><option value="">All campuses</option>${uniq("Campus").map(v=>`<option ${UI.campus===v?"selected":""}>${esc(v)}</option>`).join("")}</select>
+    <select id="fBldg"><option value="">All buildings</option>${uniq("Building").map(v=>`<option ${UI.bldg===v?"selected":""}>${esc(v)}</option>`).join("")}</select>
+    <select id="fType"><option value="">All types</option>${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${UI.type===k?"selected":""}>${v}</option>`).join("")}</select>
+    <select id="fStatus"><option value="">Any status</option>${[["ok","Passed & current"],["fail","Failed last test"],["due","Due or never tested"],["issues","Has open issues"],["ups","UPS battery due"],["data","Record gaps"]].map(([k,v])=>`<option value="${k}" ${UI.status===k?"selected":""}>${v}</option>`).join("")}</select>
+    <button class="btn pri" id="addDev">+ Add device</button>
+  </div>
+  <div class="card"><div class="tablewrap" id="tw"></div></div>
+  <p class="small" id="devCount" style="margin-top:8px"></p>`;
+  const bind=(id,k)=>$(id).addEventListener(id==="#q"?"input":"change",e=>{UI[k]=e.target.value;drawTable();});
+  bind("#q","q");bind("#fCampus","campus");bind("#fBldg","bldg");bind("#fType","type");bind("#fStatus","status");
+  $("#addDev").onclick=addDevice;
+  if(keepFocus){ const q=$("#q"); q.focus(); q.setSelectionRange(q.value.length,q.value.length); }
+  drawTable();
+}
+function drawTable(){
+  const A=active(); const q=UI.q.trim().toLowerCase();
+  const rows=A.filter(d=>{
+    if(UI.campus&&d.f.Campus!==UI.campus) return false;
+    if(UI.bldg&&d.f.Building!==UI.bldg) return false;
+    if(UI.type&&d.type!==UI.type) return false;
+    const s=testState(d).k;
+    if(UI.status==="ok"&&s!=="ok") return false;
+    if(UI.status==="fail"&&s!=="fail") return false;
+    if(UI.status==="due"&&!(s==="due"||s==="never")) return false;
+    if(UI.status==="issues"&&!openIssues(d).length) return false;
+    if(UI.status==="ups"&&!upsDue(d)) return false;
+    if(UI.status==="data"&&!dataWarnings(d,A).some(w=>!/UPS|not edited/.test(w))) return false;
+    if(q && !Object.values(d.f).some(v=>String(v).toLowerCase().includes(q))) return false;
+    return true;
+  });
+  const key={name:d=>nm(d).toLowerCase(),bldg:d=>(d.f.Building+" "+d.f.Floor+" "+d.f.Room).toLowerCase(),type:d=>d.type,ip:d=>(d.f["IP Address"]||"~").split(".").map(n=>n.padStart(3,"0")).join("."),test:d=>{const t=lastTest(d);return t?t.at:"0";},iss:d=>openIssues(d).length,edit:d=>{const x=parseAnyDate(d.f["Last Edited Date"]);return x?x.getTime():0;}}[UI.sort];
+  rows.sort((a,b)=>{const x=key(a),y=key(b);return (x<y?-1:x>y?1:0)*UI.dir;});
+  const th=(k,l,cls="")=>`<th data-sort="${k}" class="${cls}">${l}${UI.sort===k?(UI.dir>0?" ▲":" ▼"):""}</th>`;
+  $("#tw").innerHTML=`<table><thead><tr>${th("name","Register")}${th("bldg","Location","hide-sm")}${th("type","Type","hide-sm")}${th("ip","IP address","hide-sm")}${th("test","Last test")}${th("iss","Issues")}${th("edit","Last edited","hide-sm")}</tr></thead><tbody>
+  ${rows.map(d=>{const s=testState(d),i=openIssues(d).length,w=dataWarnings(d,A);return `<tr data-open="${d.id}">
+    <td><div class="t">${esc(nm(d))}</div><div class="d">${esc(d.f["Computer Name"]||d.f["Serial Number (S/N)"]||"")}${w.length?` · <span style="color:var(--warn)" title="${esc(w.join("\n"))}">⚠ ${w.length}</span>`:""}</div></td>
+    <td class="hide-sm"><div>${esc(d.f.Building)}</div><div class="d">${esc([d.f.Campus,d.f.Floor,d.f.Room&&("Rm "+d.f.Room)].filter(Boolean).join(" · "))}</div></td>
+    <td class="hide-sm"><span class="chip acc">${TYPES[d.type]}</span></td>
+    <td class="hide-sm mono">${esc(d.f["IP Address"]||"—")}</td>
+    <td><span class="chip ${s.cls}">${esc(s.label)}</span></td>
+    <td>${i?`<span class="chip bad">${i} open</span>`:`<span class="small">—</span>`}</td>
+    <td class="hide-sm small">${fmtDate(d.f["Last Edited Date"])}</td></tr>`;}).join("")||`<tr><td colspan="7" class="empty">No devices match these filters.</td></tr>`}
+  </tbody></table>`;
+  $("#tw thead").onclick=e=>{const t=e.target.closest("[data-sort]");if(!t)return;if(UI.sort===t.dataset.sort)UI.dir*=-1;else{UI.sort=t.dataset.sort;UI.dir=1;}drawTable();};
+  $("#devCount").textContent=`Showing ${rows.length} of ${A.length} active devices`;
+}
+async function addDevice(){
+  const f=Object.fromEntries(COLS.map(c=>[c,""])); f["Register Location/Name"]="New register"; f["Last Edited Date"]=toCsvDate(new Date());
+  const d={id:uid(),type:"pos",active:true,f,tests:[],issues:[],history:[]};
+  S.devices.push(d);
+  if(!await run(sb.from("reg_devices").insert(devRow(d)))) return;
+  await addHistory(d,{at:nowISO(),by:myName(),kind:"created",note:"Added manually"});
+  render(); openDrawer(d.id,"details");
+}
+
+/* ---------- drawer ---------- */
+let cur=null, curTab="details";
+function openDrawer(id,tab){ cur=S.devices.find(d=>d.id===id); if(!cur) return; curTab=tab||"details"; drawDrawer(); $("#drawer").classList.add("on"); $("#scrim").classList.add("on"); }
+function closeDrawer(force){ if(!force && curTab==="details" && dirty() && !confirm("Discard unsaved changes?")) return; $("#drawer").classList.remove("on"); $("#scrim").classList.remove("on"); cur=null; render(); flushPending(); }
+$("#scrim").onclick=()=>closeDrawer();
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if($("#modal").classList.contains("on")) closeModal(); else if(cur) closeDrawer(); }});
+function dirty(){ const f=$("#dform"); if(!f||!cur) return false; return [...f.querySelectorAll("[data-f]")].some(el=>readField(el)!==cur.f[el.dataset.f]) || (f.querySelector("#dtype")&&f.querySelector("#dtype").value!==cur.type); }
+function readField(el){ const k=el.dataset.f; if(DATE_FIELDS.has(k)){ if(!el.value) return ""; const old=parseAnyDate(cur.f[k]); if(old && toInputDate(old)===el.value) return cur.f[k]; const [y,m,d]=el.value.split("-").map(Number); return toCsvDate(new Date(y,m-1,d)); } return el.value.trim(); }
+function drawDrawer(){
+  const d=cur, s=testState(d), A=active(), ml=mapLink(d);
+  const tabs=[["details","Details"],["tests",`Tests (${d.tests.length})`],["issues",`Issues (${openIssues(d).length})`],["history","Change log"]];
+  $("#drawer").innerHTML=`
+  <div class="dh"><div class="row"><h3>${esc(nm(d))}</h3><button class="btn sm" id="dClose" aria-label="Close">✕</button></div>
+    <div class="meta"><span class="chip acc">${TYPES[d.type]}</span><span class="chip ${s.cls}">${esc(s.label)}</span>${openIssues(d).length?`<span class="chip bad">${openIssues(d).length} open issue${openIssues(d).length>1?"s":""}</span>`:""}<span>${esc([d.f.Building,d.f.Floor,d.f.Room&&("Rm "+d.f.Room)].filter(Boolean).join(" · "))}</span>${ml?`<a href="${ml}" target="_blank" rel="noopener">Map ↗</a>`:""}</div>
+    <div class="dtabs">${tabs.map(([k,l])=>`<button data-t="${k}" class="${curTab===k?"on":""}">${l}</button>`).join("")}</div></div>
+  <div class="db" id="dbody"></div><div class="df" id="dfoot"></div>`;
+  $("#dClose").onclick=()=>closeDrawer();
+  $("#drawer .dtabs").onclick=e=>{const b=e.target.closest("button");if(!b)return; if(curTab==="details"&&dirty()&&!confirm("Discard unsaved changes?"))return; curTab=b.dataset.t;drawDrawer();flushPending();};
+  const body=$("#dbody"), foot=$("#dfoot");
+  if(curTab==="details"){
+    const w=dataWarnings(d,A);
+    body.innerHTML=`${w.length?`<div class="warnbox"><b>Check this record</b><ul style="margin:4px 0 0;padding-left:18px">${w.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+    <form id="dform" autocomplete="off">
+    <fieldset><legend>Device type</legend><div class="fgrid"><label>Type (sets the test checklist)<select id="dtype">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}" ${d.type===k?"selected":""}>${v}</option>`).join("")}</select></label><label>Last edited<input type="text" value="${esc(fmtDT(d.f["Last Edited Date"]))}" disabled></label></div></fieldset>
+    ${GROUPS.map(([g,ks])=>`<fieldset><legend>${g}</legend><div class="fgrid">${ks.map(k=>{
+      const v=d.f[k]||""; const full=LONG_FIELDS.has(k)?"full":"";
+      if(DATE_FIELDS.has(k)) return `<label class="${full}">${esc(k)}<input type="date" data-f="${esc(k)}" value="${toInputDate(parseAnyDate(v))}"></label>`;
+      if(k==="Notes") return `<label class="full">${esc(k)}<textarea rows="3" data-f="${esc(k)}">${esc(v)}</textarea></label>`;
+      if(k==="Campus"||k==="Building") return `<label>${esc(k)}<input type="text" list="dl${k}" data-f="${esc(k)}" value="${esc(v)}"></label>`;
+      const mono=/Address|Serial|MAC|Tag|Name$|^x$|^y$/.test(k)&&k!=="Register Location/Name"?" mono":"";
+      return `<label class="${full}">${esc(k)}<input type="text" class="${mono}" data-f="${esc(k)}" value="${esc(v)}"></label>`;}).join("")}</div></fieldset>`).join("")}
+    <datalist id="dlCampus">${[...new Set(S.devices.map(x=>x.f.Campus).filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+    <datalist id="dlBuilding">${[...new Set(S.devices.map(x=>x.f.Building).filter(Boolean))].map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+    </form>`;
+    $("#dform").addEventListener("input",e=>{const el=e.target.closest("[data-f]");if(el) el.closest("label").classList.toggle("changed",readField(el)!==cur.f[el.dataset.f]);});
+    foot.innerHTML=`<button class="btn danger" id="dRetire" style="margin-right:auto">Retire device</button><button class="btn" id="dTest">Run test</button><button class="btn pri" id="dSave">Save changes</button>`;
+    $("#dSave").onclick=saveDetails; $("#dTest").onclick=()=>openTest(d.id); $("#dRetire").onclick=retire;
+  } else if(curTab==="tests"){
+    const tests=[...d.tests].sort((a,b)=>a.at<b.at?1:-1);
+    body.innerHTML=tests.length?`<ul class="tl">${tests.map(t=>`<li><div class="h"><span class="chip ${t.result==="pass"?"ok":"bad"}">${t.result==="pass"?"Pass":"Fail"}</span><b>${esc(t.by||"—")}</b><span class="when">${fmtDT(t.at)}</span><button class="btn sm danger" data-deltest="${t.id}">Delete</button></div>
+      <ul class="items">${t.items.map(i=>`<li><span class="chip ${i.r==="pass"?"ok":i.r==="fail"?"bad":""}" style="min-width:44px;justify-content:center">${i.r==="pass"?"Pass":i.r==="fail"?"Fail":"N/A"}</span><span>${esc(i.label)}${i.note?` — <i>${esc(i.note)}</i>`:""}</span></li>`).join("")}</ul>
+      ${t.notes?`<div class="chg"><b>Notes:</b> ${esc(t.notes)}</div>`:""}</li>`).join("")}</ul>`:`<div class="empty">No tests logged for this device yet.</div>`;
+    body.onclick=async e=>{const b=e.target.closest("[data-deltest]");if(!b)return;if(!confirm("Delete this test record?"))return;const id=b.dataset.deltest;cur.tests=cur.tests.filter(t=>t.id!==id);const d0=cur;drawDrawer();if(await run(sb.from("reg_tests").delete().eq("id",id),"Test deleted"))await addHistory(d0,{at:nowISO(),by:myName(),kind:"test-deleted",note:"Deleted a test record"});render();};
+    foot.innerHTML=`<button class="btn pri" id="dTest">Run test</button>`; $("#dTest").onclick=()=>openTest(d.id);
+  } else if(curTab==="issues"){
+    const iss=[...d.issues].sort((a,b)=>(a.status==="resolved")-(b.status==="resolved")||(a.at<b.at?1:-1));
+    body.innerHTML=iss.length?`<ul class="tl">${iss.map(issueCard).join("")}</ul>`:`<div class="empty">No issues logged for this device.</div>`;
+    bindIssueActions(body);
+    foot.innerHTML=`<button class="btn pri" id="dIssue">+ Log issue</button>`; $("#dIssue").onclick=()=>openIssueModal(d.id);
+  } else {
+    const h=[...d.history].sort((a,b)=>a.at<b.at?1:-1);
+    body.innerHTML=h.length?`<ul class="tl">${h.map(x=>`<li><div class="h"><b>${esc(x.by||"—")}</b><span class="when">${fmtDT(x.at)}</span></div>
+      ${x.changes?x.changes.map(c=>`<div class="chg"><span class="small">${esc(c.k)}:</span> ${c.from?`<del>${esc(c.from)}</del>`:`<span class="small">(blank)</span>`} → ${c.to?`<ins>${esc(c.to)}</ins>`:`<span class="small">(blank)</span>`}</div>`).join(""):""}${x.note&&!(x.changes&&x.kind==="edit"&&!x.note)?`<div class="chg">${esc(x.note)}</div>`:""}</li>`).join("")}</ul>`:`<div class="empty">No changes logged yet.</div>`;
+    foot.innerHTML="";
+  }
+}
+async function saveDetails(){
+  const changes=[]; document.querySelectorAll("#dform [data-f]").forEach(el=>{const k=el.dataset.f,v=readField(el); if(v!==cur.f[k]){changes.push({k,from:cur.f[k],to:v});cur.f[k]=v;}});
+  const nt=$("#dtype").value; if(nt!==cur.type){changes.push({k:"Device type",from:TYPES[cur.type],to:TYPES[nt]});cur.type=nt;}
+  if(!changes.length){toast("No changes to save");return;}
+  cur.f["Last Edited Date"]=toCsvDate(new Date());
+  const d=cur; drawDrawer();
+  if(!await run(sb.from("reg_devices").update(devRow(d)).eq("id",d.id))) return;
+  await addHistory(d,{at:nowISO(),by:myName(),kind:"edit",changes});
+  if(cur===d) drawDrawer(); render(); toast(`Saved ${changes.length} change${changes.length>1?"s":""}`);
+}
+async function retire(){
+  if(!confirm(`Retire “${nm(cur)}”? It will be hidden from lists and exports but kept in the database. You can restore it from Data & settings.`)) return;
+  const d=cur; d.active=false; closeDrawer(true);
+  if(await run(sb.from("reg_devices").update(devRow(d)).eq("id",d.id),"Device retired")) await addHistory(d,{at:nowISO(),by:myName(),kind:"retired",note:"Device retired"});
+  render();
+}
+
+/* ---------- modal helpers ---------- */
+function openModal(html){ $("#mbox").innerHTML=html; $("#modal").classList.add("on"); }
+function closeModal(){ $("#modal").classList.remove("on"); $("#mbox").innerHTML=""; flushPending(); }
+$("#modal").addEventListener("mousedown",e=>{ if(e.target.id==="modal") closeModal(); });
+
+/* ---------- testing ---------- */
+let testCtx=null;
+function openTest(id,fromRound){
+  const d=S.devices.find(x=>x.id===id); const list=S.settings.checklists[d.type]||[];
+  const hasGH=!!(d.f["GrubHub Printer MAC Address"]||d.f["GrubHub Printer IP Address"]);
+  testCtx={id,fromRound,items:list.map(label=>({label,r:(/grubhub/i.test(label)&&!hasGH)?"na":"",note:""}))};
+  openModal(`<div class="mh"><h3>Test: ${esc(nm(d))}</h3><div>${TYPES[d.type]} · ${esc(d.f.Building)} · IP ${esc(d.f["IP Address"]||"—")} · Login ${esc(d.f["Login Name"]||"—")} · Drawer key ${esc(d.f["Cash Drawer Key"]||"—")}</div></div>
+  <div class="mb"><div class="row2"><label>Tester<input type="text" id="tBy" value="${esc(myName())}"></label><label>Test date<input type="date" id="tDate" value="${today()}"></label></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn sm" id="allPass">Mark remaining as pass</button></div>
+    <div id="tItems"></div>
+    <label class="small" style="display:block;margin-top:6px;font-weight:600">Overall notes<textarea id="tNotes" rows="2" placeholder="Anything else worth noting"></textarea></label>
+    <label class="small" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="tIssue" checked> Open an issue for each failed item</label>
+  </div>
+  <div class="mf"><span class="small" id="tSum" style="margin-right:auto"></span><button class="btn" id="tCancel">Cancel</button><button class="btn pri" id="tSave">Save test</button></div>`);
+  drawItems();
+  $("#tCancel").onclick=closeModal;
+  $("#allPass").onclick=()=>{testCtx.items.forEach(i=>{if(!i.r)i.r="pass";});drawItems();};
+  $("#tItems").addEventListener("click",e=>{const b=e.target.closest(".seg button");if(!b)return;const i=+b.closest(".chk").dataset.i;testCtx.items[i].r=testCtx.items[i].r===b.dataset.v?"":b.dataset.v;drawItems();if(testCtx.items[i].r==="fail")setTimeout(()=>{const n=document.querySelector(`.chk[data-i="${i}"] input.note`);n&&n.focus();},0);});
+  $("#tItems").addEventListener("input",e=>{if(e.target.matches("input.note"))testCtx.items[+e.target.closest(".chk").dataset.i].note=e.target.value;});
+  $("#tSave").onclick=saveTest;
+}
+function drawItems(){
+  $("#tItems").innerHTML=testCtx.items.map((it,i)=>`<div class="chk ${it.r} ${it.note?"hasnote":""}" data-i="${i}"><div class="top"><span>${esc(it.label)}</span><div class="seg">${["pass","fail","na"].map(v=>`<button type="button" data-v="${v}" class="${it.r===v?"on":""}">${v==="na"?"N/A":v[0].toUpperCase()+v.slice(1)}</button>`).join("")}</div></div><input class="note" type="text" placeholder="What happened?" value="${esc(it.note)}"></div>`).join("");
+  const n=testCtx.items.length, done=testCtx.items.filter(i=>i.r).length, f=testCtx.items.filter(i=>i.r==="fail").length;
+  $("#tSum").innerHTML=`${done}/${n} answered${f?` · <b style="color:var(--bad)">${f} failed</b>`:""}`;
+}
+async function saveTest(){
+  const miss=testCtx.items.filter(i=>!i.r).length;
+  if(miss && !confirm(`${miss} item${miss>1?"s are":" is"} unanswered and will be recorded as N/A. Save anyway?`)) return;
+  testCtx.items.forEach(i=>{if(!i.r)i.r="na";});
+  const d=S.devices.find(x=>x.id===testCtx.id); const by=$("#tBy").value.trim()||myName();
+  const dv=$("#tDate").value; let at=new Date(); if(dv && dv!==today()){const [y,m,dd]=dv.split("-").map(Number); at=new Date(y,m-1,dd,12,0);}
+  const fails=testCtx.items.filter(i=>i.r==="fail");
+  const t={id:uid(),at:at.toISOString(),by,result:fails.length?"fail":"pass",items:testCtx.items.map(i=>({label:i.label,r:i.r,note:i.note.trim()})),notes:$("#tNotes").value.trim()};
+  const newIss=(fails.length && $("#tIssue").checked)?fails.map(i=>({id:uid(),at:t.at,by,title:i.label,detail:i.note.trim(),status:"open",priority:"normal",ticket:"",testId:t.id,log:[]})):[];
+  const fromRound=testCtx.fromRound; $("#tSave").disabled=true;
+  if(!await run(sb.from("reg_tests").insert(testRow(d,t)))){ $("#tSave").disabled=false; return; }
+  d.tests.push(t);
+  if(newIss.length){ d.issues.push(...newIss); await run(sb.from("reg_issues").insert(newIss.map(i=>issRow(d,i)))); }
+  await addHistory(d,{at:nowISO(),by,kind:"test",note:`Test logged: ${t.result.toUpperCase()}${fails.length?` (${fails.length} failed item${fails.length>1?"s":""})`:""}`});
+  testCtx=null; closeModal(); toast(t.result==="pass"?"Test saved — pass":"Test saved — failures logged");
+  if(cur) drawDrawer(); render();
+  if(fromRound){ const next=roundNext(); if(next && confirm(`Next up: ${nm(next)}. Test it now?`)) openTest(next.id,true); }
+}
+
+/* ---------- test round ---------- */
+function roundDevices(){ const r=S.round; if(!r) return []; return active().filter(d=>(!r.campus||d.f.Campus===r.campus)&&(!r.bldg||d.f.Building===r.bldg)&&(!r.type||d.type===r.type)).sort((a,b)=>(a.f.Building+nm(a)).localeCompare(b.f.Building+nm(b))); }
+function roundTest(d){ return d.tests.filter(t=>t.at>=S.round.started).sort((a,b)=>a.at<b.at?1:-1)[0]; }
+function roundNext(){ return S.round && roundDevices().find(d=>!roundTest(d)); }
+function roundDefaultName(){ const d=new Date(),m=d.getMonth(); return `${m<5?"Spring":m<8?"Summer":"Fall"} ${d.getFullYear()} register check`; }
+function renderRound(){
+  const A=active(); const uniq=k=>[...new Set(A.map(d=>d.f[k]).filter(Boolean))].sort();
+  if(!S.round){
+    $("#main").innerHTML=`<h2>Test round</h2><p class="sub">Walk a group of devices in order — each one tested is checked off, and everyone on the team sees the same progress.</p>
+    <div class="card pad" style="max-width:560px"><div class="row2"><label>Round name<input type="text" id="rName" value="${esc(roundDefaultName())}"></label></div>
+    <div class="row2"><label>Campus<select id="rCampus"><option value="">All</option>${uniq("Campus").map(v=>`<option>${esc(v)}</option>`).join("")}</select></label><label>Building<select id="rBldg"><option value="">All</option>${uniq("Building").map(v=>`<option>${esc(v)}</option>`).join("")}</select></label><label>Type<select id="rType"><option value="">All</option>${Object.entries(TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></label></div>
+    <button class="btn pri" id="rStart">Start round</button></div>
+    ${S.pastRounds.length?`<div class="card" style="margin-top:16px;max-width:560px"><div class="sect-h">Past rounds</div><ul class="list">${S.pastRounds.slice().reverse().map(r=>`<li style="cursor:default"><div class="grow"><div class="t">${esc(r.name)}</div><div class="d">${fmtDate(r.started)} – ${fmtDate(r.ended)}</div></div><span class="chip ${r.failed?"bad":"ok"}">${r.done}/${r.total} tested${r.failed?` · ${r.failed} failed`:""}</span></li>`).join("")}</ul></div>`:""}`;
+    $("#rStart").onclick=async()=>{ const r={id:uid(),name:$("#rName").value.trim()||roundDefaultName(),started:nowISO(),campus:$("#rCampus").value,bldg:$("#rBldg").value,type:$("#rType").value};
+      S.round=r; if(!roundDevices().length){S.round=null;toast("No devices match that scope");return;}
+      render(); await run(sb.from("reg_rounds").insert({id:r.id,name:r.name,started_at:r.started,scope:{campus:r.campus,bldg:r.bldg,type:r.type}}),"Round started"); };
+    return;
+  }
+  const R=roundDevices(), done=R.filter(roundTest), failed=done.filter(d=>roundTest(d).result==="fail"), next=roundNext();
+  const scope=[S.round.campus&&S.round.campus+" campus",S.round.bldg,S.round.type&&TYPES[S.round.type]].filter(Boolean).join(" · ")||"All devices";
+  let lastB=null;
+  $("#main").innerHTML=`<div class="toolbar"><div><h2>${esc(S.round.name)}</h2><p class="sub" style="margin:0">${esc(scope)} · started ${fmtDate(S.round.started)}</p></div><span class="sp"></span>
+    <button class="btn" id="rPrint">Print checklist</button><button class="btn" id="rCsv">Export round CSV</button><button class="btn" id="rEnd">End round</button>${next?`<button class="btn pri" id="rNext">Test next: ${esc(nm(next))}</button>`:""}</div>
+  <div class="card pad" style="margin-bottom:12px"><div class="prog"><div class="bar"><i style="width:${R.length?(done.length-failed.length)/R.length*100:0}%;background:var(--ok)"></i><i style="width:${R.length?failed.length/R.length*100:0}%;background:var(--bad)"></i></div><b>${done.length} / ${R.length}</b></div>
+  <div class="small">${done.length-failed.length} passed · ${failed.length} failed · ${R.length-done.length} remaining${!next?" — <b>round complete</b>. End the round to archive it.":""}</div></div>
+  <div class="card"><ul class="list">${R.map(d=>{const t=roundTest(d);const hdr=d.f.Building!==lastB?`<li style="cursor:default;background:var(--panel2);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">${esc(lastB=d.f.Building)}</li>`:"";
+    return hdr+`<li data-open="${d.id}" data-tab="tests"><span class="dot ${t?(t.result==="pass"?"ok":"bad"):""}"></span><div class="grow"><div class="t">${esc(nm(d))}</div><div class="d">${TYPES[d.type]} · ${esc(d.f["IP Address"]||"no IP")}${d.f.Room?" · Rm "+esc(d.f.Room):""}</div></div>${t?`<span class="chip ${t.result==="pass"?"ok":"bad"}">${t.result==="pass"?"Pass":"Fail"} · ${esc(t.by)}</span>`:`<button class="btn sm" data-rtest="${d.id}">Test</button>`}</li>`;}).join("")}</ul></div>`;
+  $("#main").querySelectorAll("[data-rtest]").forEach(b=>b.onclick=e=>{e.stopPropagation();openTest(b.dataset.rtest,true);});
+  if(next) $("#rNext").onclick=()=>openTest(next.id,true);
+  $("#rEnd").onclick=async()=>{ if(R.length-done.length && !confirm(`${R.length-done.length} devices haven't been tested. End the round anyway?`)) return;
+    const r=S.round, summary={total:R.length,done:done.length,failed:failed.length}; S.pastRounds.push({name:r.name,started:r.started,ended:nowISO(),...summary}); S.round=null; render();
+    await run(sb.from("reg_rounds").update({ended_at:nowISO(),summary}).eq("id",r.id),"Round archived"); };
+  $("#rCsv").onclick=()=>{ const lines=[["Device","Building","Type","IP","Tested","Result","Tester","Failed items"].join(",")]; R.forEach(d=>{const t=roundTest(d);lines.push([nm(d),d.f.Building,TYPES[d.type],d.f["IP Address"],t?fmtDT(t.at):"",t?t.result:"not tested",t?t.by:"",t?t.items.filter(i=>i.r==="fail").map(i=>i.label+(i.note?` (${i.note})`:"")).join("; "):""].map(csvCell).join(","));}); download(`${S.round.name.replace(/[^\w-]+/g,"_")}.csv`,lines.join("\r\n"),"text/csv"); };
+  $("#rPrint").onclick=()=>printRound(R);
+}
+function printRound(R){
+  const w=window.open("","_blank"); if(!w){toast("Allow pop-ups to print");return;}
+  w.document.write(`<!doctype html><title>${esc(S.round.name)}</title><style>body{font:12px system-ui;margin:24px}h1{font-size:18px;margin:0}h2{font-size:14px;margin:18px 0 6px;border-bottom:1px solid #999}table{width:100%;border-collapse:collapse;margin-bottom:8px}td{border:1px solid #bbb;padding:4px 6px}td.b{width:22px}.dev{page-break-inside:avoid;margin-bottom:14px}.meta{color:#555}</style>
+  <h1>${esc(S.round.name)}</h1><div class="meta">Printed ${fmtDT(new Date())} · Tester: ________________ · Date: ________</div>
+  ${R.map(d=>`<div class="dev"><h2>${esc(nm(d))}</h2><div class="meta">${esc(d.f.Building)} ${esc(d.f.Room?"Rm "+d.f.Room:"")} · IP ${esc(d.f["IP Address"]||"—")} · Login ${esc(d.f["Login Name"]||"—")} · Key ${esc(d.f["Cash Drawer Key"]||"—")}</div><table>${(S.settings.checklists[d.type]||[]).map(l=>`<tr><td>${esc(l)}</td><td class="b">P</td><td class="b">F</td><td class="b">N/A</td><td style="width:35%"></td></tr>`).join("")}</table></div>`).join("")}`);
+  w.document.close(); setTimeout(()=>w.print(),300);
+}
+
+/* ---------- issues ---------- */
+function issueCard(i){
+  const pr=i.priority==="high"?`<span class="chip bad">High</span>`:i.priority==="low"?`<span class="chip">Low</span>`:"";
+  return `<li data-iss="${i.id}"><div class="h"><span class="chip ${i.status==="resolved"?"ok":i.status==="waiting"?"warn":"bad"}">${{open:"Open",waiting:"Waiting",resolved:"Resolved"}[i.status]}</span>${pr}<b>${esc(i.title)}</b><span class="when">${fmtDate(i.at)} · ${esc(i.by)}</span></div>
+  ${i.detail?`<div class="chg">${esc(i.detail)}</div>`:""}${i.ticket?`<div class="chg small">Ticket / ref: <span class="mono">${esc(i.ticket)}</span></div>`:""}
+  ${(i.log||[]).map(l=>`<div class="chg small">${fmtDT(l.at)} · ${esc(l.by)}: ${esc(l.note)}</div>`).join("")}
+  <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">${i.status!=="resolved"?`<button class="btn sm" data-ia="note">Add note</button>${i.status!=="waiting"?`<button class="btn sm" data-ia="wait">Mark waiting</button>`:`<button class="btn sm" data-ia="open">Reopen</button>`}<button class="btn sm pri" data-ia="resolve">Resolve</button>`:`<button class="btn sm" data-ia="open">Reopen</button>`}<button class="btn sm danger" data-ia="del">Delete</button></div></li>`;
+}
+function findIssue(iid){ for(const d of S.devices){const i=d.issues.find(x=>x.id===iid); if(i) return {d,i};} return {}; }
+function bindIssueActions(root){
+  root.addEventListener("click",async e=>{
+    const b=e.target.closest("[data-ia]"); if(!b) return; e.stopPropagation();
+    const {d,i}=findIssue(b.closest("[data-iss]").dataset.iss); if(!i) return; const by=myName(); const a=b.dataset.ia;
+    if(a==="note"){ const n=prompt("Add a note (vendor contacted, part ordered, etc.)"); if(!n) return; i.log.push({at:nowISO(),by,note:n}); }
+    if(a==="wait"){ const n=prompt("Waiting on what? (optional — e.g. Heartland, ITS, part)"); if(n===null) return; i.status="waiting"; i.log.push({at:nowISO(),by,note:"Waiting"+(n?": "+n:"")}); }
+    if(a==="open"){ i.status="open"; i.resolvedAt=null; i.log.push({at:nowISO(),by,note:"Reopened"}); }
+    if(a==="resolve"){ const n=prompt("How was it resolved? (optional)"); if(n===null) return; i.status="resolved"; i.resolvedAt=nowISO(); i.log.push({at:nowISO(),by,note:"Resolved"+(n?": "+n:"")}); }
+    if(a==="del"){ if(!confirm("Delete this issue permanently?")) return; d.issues=d.issues.filter(x=>x!==i); if(cur&&cur.id===d.id){cur=d;drawDrawer();} render(); await run(sb.from("reg_issues").delete().eq("id",i.id),"Issue deleted"); return; }
+    if(cur) drawDrawer(); render();
+    if(await run(sb.from("reg_issues").update(issRow(d,i)).eq("id",i.id)) && a==="resolve") await addHistory(d,{at:nowISO(),by,kind:"issue",note:`Resolved issue: ${i.title}`});
+  });
+}
+function openIssueModal(devId){
+  const A=active();
+  openModal(`<div class="mh"><h3>Log an issue</h3></div><div class="mb">
+    <div class="row2"><label>Device<select id="iDev">${A.slice().sort((a,b)=>nm(a).localeCompare(nm(b))).map(d=>`<option value="${d.id}" ${d.id===devId?"selected":""}>${esc(nm(d))}</option>`).join("")}</select></label></div>
+    <div class="row2"><label>What's wrong<input type="text" id="iTitle" placeholder="e.g. Receipt printer jamming"></label></div>
+    <div class="row2"><label>Details<textarea id="iDetail" rows="3"></textarea></label></div>
+    <div class="row2"><label>Priority<select id="iPri"><option value="normal">Normal</option><option value="high">High — register down</option><option value="low">Low</option></select></label><label>Ticket / reference #<input type="text" id="iTicket" placeholder="ITS, Heartland, TouchNet case…"></label></div>
+  </div><div class="mf"><button class="btn" id="iCancel">Cancel</button><button class="btn pri" id="iSave">Log issue</button></div>`);
+  $("#iCancel").onclick=closeModal; setTimeout(()=>$("#iTitle").focus(),0);
+  $("#iSave").onclick=async()=>{ const title=$("#iTitle").value.trim(); if(!title){toast("Describe the issue first");return;} const d=S.devices.find(x=>x.id===$("#iDev").value); const by=myName();
+    const i={id:uid(),at:nowISO(),by,title,detail:$("#iDetail").value.trim(),priority:$("#iPri").value,ticket:$("#iTicket").value.trim(),status:"open",log:[]};
+    $("#iSave").disabled=true; if(!await run(sb.from("reg_issues").insert(issRow(d,i)))){$("#iSave").disabled=false;return;}
+    d.issues.push(i); await addHistory(d,{at:nowISO(),by,kind:"issue",note:`Opened issue: ${title}`}); closeModal(); if(cur) drawDrawer(); render(); toast("Issue logged"); };
+}
+function renderIssues(){
+  const all=[]; active().forEach(d=>d.issues.forEach(i=>all.push({d,i})));
+  const f=UI.issFilter; const P={high:0,normal:1,low:2};
+  const rows=all.filter(x=>f==="all"||(f==="open"?x.i.status!=="resolved":x.i.status===f)).sort((a,b)=>(P[a.i.priority]-P[b.i.priority])||(a.i.at<b.i.at?1:-1));
+  $("#main").innerHTML=`<div class="toolbar"><div><h2>Issues</h2><p class="sub" style="margin:0">Failed test items open here automatically. Track vendor tickets and fixes until resolved.</p></div><span class="sp"></span>
+  <select id="iF">${[["open","Open & waiting"],["waiting","Waiting only"],["resolved","Resolved"],["all","All"]].map(([k,v])=>`<option value="${k}" ${f===k?"selected":""}>${v}</option>`).join("")}</select><button class="btn" id="iCsv">Export CSV</button><button class="btn pri" id="iNew">+ Log issue</button></div>
+  ${rows.length?`<ul class="tl" id="iList">${rows.map(x=>issueCard(x.i).replace("<b>",`<b><a href="#" data-open="${x.d.id}" data-tab="issues" style="color:inherit;text-decoration:none;border-bottom:1px dotted var(--faint)">${esc(nm(x.d))}</a> — `)).join("")}</ul>`:`<div class="card empty">No ${f==="all"?"":f==="open"?"open ":f+" "}issues.</div>`}`;
+  $("#iF").onchange=e=>{UI.issFilter=e.target.value;renderIssues();};
+  $("#iNew").onclick=()=>openIssueModal();
+  $("#iCsv").onclick=()=>{const L=[["Device","Building","Opened","By","Priority","Status","Issue","Details","Ticket","Resolved","Log"].join(",")];all.forEach(({d,i})=>L.push([nm(d),d.f.Building,fmtDT(i.at),i.by,i.priority,i.status,i.title,i.detail,i.ticket||"",i.resolvedAt?fmtDT(i.resolvedAt):"",(i.log||[]).map(l=>`${fmtDate(l.at)} ${l.by}: ${l.note}`).join(" | ")].map(csvCell).join(",")));download(`register-issues-${today()}.csv`,L.join("\r\n"),"text/csv");};
+  const L=$("#iList"); if(L) bindIssueActions(L);
+}
+
+/* ---------- data & settings ---------- */
+function renderData(){
+  const retired=S.devices.filter(d=>!d.active); const adm=ME.is_admin; const dis=adm?"":"disabled";
+  $("#main").innerHTML=`<h2>Data &amp; settings</h2><p class="sub">Data lives in Supabase and syncs live to everyone signed in.${adm?"":" Thresholds, checklists and the user list can be changed by admins."}</p>
+  <div class="grid set-grid">
+    <div class="card pad"><h3 style="margin:0 0 6px;font-size:15px">Inventory CSV</h3><p class="small">Same 26 columns as <i>Cash Register 1.csv</i>, so edits can go back to the source layer. Importing merges by serial number (then by name) and logs every change.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn pri" id="xCsv">Export inventory CSV</button><button class="btn" id="iCsv">Import / merge CSV…</button></div></div>
+    <div class="card pad"><h3 style="margin:0 0 6px;font-size:15px">Reports &amp; backup</h3><p class="small">Test log has one row per checklist item. The JSON snapshot holds everything — devices, tests, issues and change log.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="xTests">Export test log CSV</button><button class="btn" id="xJson">Download JSON snapshot</button></div></div>
+    <div class="card pad"><h3 style="margin:0 0 10px;font-size:15px">Thresholds</h3>
+      <div class="row2"><label>Test every (days)<input type="number" min="1" id="sInt" value="${S.settings.intervalDays}" ${dis}></label><label>UPS battery life (years)<input type="number" min="0.5" step="0.5" id="sUps" value="${S.settings.upsYears}" ${dis}></label><label>Flag record stale after (days)<input type="number" min="1" id="sStale" value="${S.settings.staleDays}" ${dis}></label></div>
+      ${adm?`<button class="btn" id="sSave">Save thresholds</button>`:""}</div>
+    <div class="card" style="grid-column:1/-1"><div class="sect-h">Approved users <span>${S.users.length} can sign in</span></div>
+      <ul class="list">${S.users.map(u=>`<li style="cursor:default"><div class="grow"><div class="t">${esc(u.name||u.email)}${u.email===ME.email?" (you)":""}</div><div class="d">${esc(u.email)}</div></div>${u.is_admin?`<span class="chip acc">Admin</span>`:""}${adm&&u.email!==ME.email?`<button class="btn sm" data-uadm="${esc(u.email)}">${u.is_admin?"Remove admin":"Make admin"}</button><button class="btn sm danger" data-udel="${esc(u.email)}">Remove</button>`:""}</li>`).join("")}</ul>
+      ${adm?`<form id="uAdd" class="pad" style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line)"><input type="email" id="uEmail" placeholder="email@uml.edu" required style="flex:1;min-width:200px"><input type="text" id="uName" placeholder="Name" style="flex:1;min-width:140px"><button class="btn pri">Add user</button></form>`:""}</div>
+    <div class="card pad" style="grid-column:1/-1"><h3 style="margin:0 0 6px;font-size:15px">Test checklists</h3><p class="small">One item per line. Changes apply to future tests; past tests keep the checklist they were run with.</p>
+      <div class="grid set-grid">${Object.entries(TYPES).map(([k,v])=>`<label class="small" style="font-weight:700">${v}<textarea rows="8" data-cl="${k}" ${dis}>${esc((S.settings.checklists[k]||[]).join("\n"))}</textarea></label>`).join("")}</div>
+      ${adm?`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn pri" id="clSave">Save checklists</button><button class="btn" id="clReset">Restore defaults</button></div>`:""}</div>
+    ${retired.length?`<div class="card" style="grid-column:1/-1"><div class="sect-h">Retired devices <span>${retired.length}</span></div><ul class="list">${retired.map(d=>`<li style="cursor:default"><div class="grow"><div class="t">${esc(nm(d))}</div><div class="d">${esc(d.f.Building)}</div></div><button class="btn sm" data-restore="${d.id}">Restore</button></li>`).join("")}</ul></div>`:""}
+  </div>`;
+  $("#xJson").onclick=()=>download(`register-tracker-snapshot-${today()}.json`,JSON.stringify({exportedAt:nowISO(),exportedBy:ME.email,devices:S.devices,settings:S.settings,rounds:{current:S.round,past:S.pastRounds}},null,1),"application/json");
+  $("#xCsv").onclick=()=>{ const L=[COLS.map(csvCell).join(",")]; active().forEach(d=>L.push(COLS.map(c=>csvCell(d.f[c])).join(","))); download(`Cash Register ${today()}.csv`,"﻿"+L.join("\r\n"),"text/csv"); };
+  $("#xTests").onclick=()=>{ const L=[["Device","Building","Type","Tested","Tester","Result","Item","Item result","Item note","Test notes"].join(",")]; active().forEach(d=>d.tests.forEach(t=>t.items.forEach(i=>L.push([nm(d),d.f.Building,TYPES[d.type],fmtDT(t.at),t.by,t.result,i.label,i.r,i.note,t.notes].map(csvCell).join(","))))); download(`register-test-log-${today()}.csv`,L.join("\r\n"),"text/csv"); };
+  $("#iCsv").onclick=()=>pickFile(".csv",importCsv);
+  const saveSettings=async msg=>{ await run(sb.from("reg_settings").upsert({id:1,data:S.settings}),msg); };
+  if(adm){
+    $("#sSave").onclick=()=>{ S.settings.intervalDays=Math.max(1,+$("#sInt").value||90); S.settings.upsYears=Math.max(.5,+$("#sUps").value||3); S.settings.staleDays=Math.max(1,+$("#sStale").value||365); saveSettings("Thresholds saved"); };
+    $("#clSave").onclick=()=>{ document.querySelectorAll("[data-cl]").forEach(t=>S.settings.checklists[t.dataset.cl]=t.value.split("\n").map(s=>s.trim()).filter(Boolean)); saveSettings("Checklists saved"); };
+    $("#clReset").onclick=async()=>{ if(!confirm("Restore the default checklists?"))return; S.settings.checklists=JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)); await saveSettings("Defaults restored"); renderData(); };
+    $("#uAdd").onsubmit=async e=>{ e.preventDefault(); const email=$("#uEmail").value.trim().toLowerCase(), name=$("#uName").value.trim()||null; if(S.users.some(u=>u.email===email)){toast("Already on the list");return;}
+      if(await run(sb.from("reg_users").insert({email,name}),`${email} can now sign in`)){ S.users.push({email,name,is_admin:false}); renderData(); } };
+    $("#main").querySelectorAll("[data-udel]").forEach(b=>b.onclick=async()=>{ const em=b.dataset.udel; if(!confirm(`Remove ${em}? They'll lose access immediately.`))return; if(await run(sb.from("reg_users").delete().eq("email",em),"User removed")){ S.users=S.users.filter(u=>u.email!==em); renderData(); } });
+    $("#main").querySelectorAll("[data-uadm]").forEach(b=>b.onclick=async()=>{ const u=S.users.find(x=>x.email===b.dataset.uadm); if(await run(sb.from("reg_users").update({is_admin:!u.is_admin}).eq("email",u.email))){ u.is_admin=!u.is_admin; renderData(); } });
+  }
+  $("#main").querySelectorAll("[data-restore]").forEach(b=>b.onclick=async()=>{ const d=S.devices.find(x=>x.id===b.dataset.restore); d.active=true; renderData(); if(await run(sb.from("reg_devices").update(devRow(d)).eq("id",d.id),"Device restored")) await addHistory(d,{at:nowISO(),by:myName(),kind:"restored",note:"Device restored"}); });
+}
+function pickFile(accept,cb){ const f=$("#fileIn"); f.accept=accept; f.value=""; f.onchange=()=>{ const file=f.files[0]; if(!file) return; const r=new FileReader(); r.onload=()=>cb(r.result); r.readAsText(file); }; f.click(); }
+async function importCsv(txt){
+  const rows=parseCSV(txt); if(rows.length<2){toast("CSV has no rows");return;}
+  const hdr=rows[0].map(h=>h.replace(/^﻿/,"").trim()); if(!hdr.includes("Register Location/Name")){toast("CSV needs a “Register Location/Name” column");return;}
+  const sn=v=>(v||"").replace(/^S\/N\s*-\s*/i,"").trim().toUpperCase();
+  const by=myName(); const upDev=[], newDev=[], hist=[]; let unchanged=0;
+  rows.slice(1).forEach(r=>{ const f={}; hdr.forEach((h,i)=>{ if(COLS.includes(h)) f[h]=(r[i]||"").trim().toLowerCase()==="null"?"":(r[i]||"").trim(); });
+    if(!f["Register Location/Name"]&&!f["Serial Number (S/N)"]) return;
+    let d=f["Serial Number (S/N)"]&&S.devices.find(x=>sn(x.f["Serial Number (S/N)"])===sn(f["Serial Number (S/N)"]));
+    if(!d) d=S.devices.find(x=>x.f["Register Location/Name"].toLowerCase()===(f["Register Location/Name"]||"").toLowerCase());
+    if(!d){ const nf=Object.fromEntries(COLS.map(c=>[c,f[c]||""])); const nd={id:uid(),type:"pos",active:true,f:nf,tests:[],issues:[],history:[]}; const n=nf["Register Location/Name"].toLowerCase(); nd.type=/^otc\b|on the fly/.test(n)?"otc":/terminal/.test(n)?"terminal":/printer/.test(n)?"printer":"pos"; newDev.push(nd); hist.push(histRow(nd,{at:nowISO(),by,kind:"created",note:"Added from CSV import"})); return; }
+    const changes=[]; Object.entries(f).forEach(([k,v])=>{ if(k==="Last Edited Date") return; if((d.f[k]||"")!==v){changes.push({k,from:d.f[k],to:v}); d.f[k]=v;} });
+    if(changes.length){ d.f["Last Edited Date"]=f["Last Edited Date"]||toCsvDate(new Date()); upDev.push(d); hist.push(histRow(d,{at:nowISO(),by,kind:"edit",changes,note:"CSV import"})); } else unchanged++;
+  });
+  if(!newDev.length&&!upDev.length){ toast(`Import: nothing changed (${unchanged} rows matched)`); return; }
+  if(!confirm(`Import will add ${newDev.length} device(s) and update ${upDev.length}. Continue?`)){ await loadAll(); render(); return; }
+  const ok=await run(sb.from("reg_devices").upsert([...newDev,...upDev].map(devRow)));
+  if(ok && hist.length) await run(sb.from("reg_history").insert(hist));
+  await loadAll(); render(); if(ok) toast(`Import: ${newDev.length} added, ${upDev.length} updated, ${unchanged} unchanged`);
+}
+
+boot();
+</script>
+</body>
+</html>
