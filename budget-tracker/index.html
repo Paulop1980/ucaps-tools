@@ -206,6 +206,7 @@ a{ color:var(--lic); }
 .pay-scen-table th{ background:#f7f3ea; text-align:center; }
 .pay-scen-table td:first-child, .pay-scen-table th:first-child{ text-align:left; }
 .pay-scen-table tr.sel td{ background:#e8f3ec; font-weight:600; }
+.pay-scen-subhead{ font-size:11px; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:.04em; margin:12px 0 2px; }
 .detail-toggle{ font-size:11px; color:var(--lic); cursor:pointer; background:none; border:none; font-family:inherit; padding:0; text-decoration:underline; }
 .map-tbl{ width:100%; border-collapse:collapse; font-size:13px; margin-top:12px; }
 .map-tbl th,.map-tbl td{ padding:8px 10px; border:1px solid var(--line); text-align:left; }
@@ -647,6 +648,49 @@ var SEED_BUDGET = [
 var BASE_BUDGET_DEFAULT = { operating:220408.5, payroll:76698 };
 
 /* ============================================================
+   PAYROLL WORKSHEET DETAIL — sourced from the FY27 budget draft
+   workbook's "Ambassador Worksheet" and "Parking Enforcement
+   Worksheet" tabs, so the per-person/per-enforcer breakdown behind
+   the Ambassadors and Student Parking Enforcers lines is visible
+   in the tracker itself (not just the rolled-up totals), and the
+   same data feeds the matching Excel export sheets. "TOTAL w/o
+   holidays" and "TOTAL" are carried over as given in the source
+   workbook — the gap between them is a manual holiday/schedule
+   adjustment in the original, not a formula reproduced here.
+   ============================================================ */
+var PAYROLL_WORKSHEET_DEFAULTS = {
+  ambassadors: {
+    contracts:[{name:"Phil H",amount:15800},{name:"Steve W",amount:15800},{name:"Steven L",amount:7900}],
+    contractsNote:"Contract amounts assume 52 weeks a year, closed the week of Christmas.",
+    scenarios:[
+      {rate:16.00, weeks:52, people:[{name:"Steve L",hours:8.5},{name:"Phil",hours:17},{name:"Steve W",hours:17}], subtotal:35360, fringe:746.78, total:36106.78},
+      {rate:16.50, weeks:52, people:[{name:"Steve L",hours:8.5},{name:"Phil",hours:17},{name:"Steve W",hours:17}], subtotal:36465, fringe:770.12, total:37235.12},
+      {rate:17.00, weeks:52, people:[{name:"Steve L",hours:8.5},{name:"Phil",hours:17},{name:"Steve W",hours:17}], subtotal:37570, fringe:793.45, total:38363.45},
+      {rate:17.50, weeks:52, people:[{name:"Steve L",hours:8.5},{name:"Phil",hours:17},{name:"Steve W",hours:17}], subtotal:38675, fringe:816.79, total:39491.79}
+    ]
+  },
+  enforcers: {
+    tiers:[
+      {name:"Need",
+        fall:{enforcers:[{name:"Enforcer 1",weeks:13,hours:20},{name:"Enforcer 2",weeks:13,hours:20},{name:"Enforcer 3",weeks:13,hours:8},{name:"Enforcer 4",weeks:13,hours:16},{name:"Enforcer 5",weeks:13,hours:16},{name:"Enforcer 6",weeks:0,hours:0}],
+          rate:15, extraLabel:"11/25 & 11/26 coverage", extra:{weeks:1,hours:36}, totalWoHolidays:16140, total:16380},
+        spring:{enforcers:[{name:"Enforcer 1",weeks:14,hours:20},{name:"Enforcer 2",weeks:14,hours:20},{name:"Enforcer 3",weeks:14,hours:8},{name:"Enforcer 4",weeks:14,hours:16},{name:"Enforcer 5",weeks:14,hours:16},{name:"Enforcer 6",weeks:14,hours:0}],
+          rate:15, extraLabel:"Spring Break Week", extra:{weeks:1,hours:0}, totalWoHolidays:16800, total:16590}},
+      {name:"Want",
+        fall:{enforcers:[{name:"Enforcer 1",weeks:13,hours:20},{name:"Enforcer 2",weeks:13,hours:20},{name:"Enforcer 3",weeks:13,hours:16},{name:"Enforcer 4",weeks:13,hours:16},{name:"Enforcer 5",weeks:13,hours:16},{name:"Enforcer 6",weeks:13,hours:8}],
+          rate:15, extraLabel:"11/25 & 11/26 coverage", extra:{weeks:1,hours:40}, totalWoHolidays:18720, total:18840},
+        spring:{enforcers:[{name:"Enforcer 1",weeks:14,hours:20},{name:"Enforcer 2",weeks:14,hours:20},{name:"Enforcer 3",weeks:14,hours:16},{name:"Enforcer 4",weeks:14,hours:16},{name:"Enforcer 5",weeks:14,hours:16},{name:"Enforcer 6",weeks:14,hours:8}],
+          rate:15, extraLabel:"Spring Break Week", extra:{weeks:1,hours:0}, totalWoHolidays:20160, total:19770}},
+      {name:"Best",
+        fall:{enforcers:[{name:"Enforcer 1",weeks:13,hours:20},{name:"Enforcer 2",weeks:13,hours:20},{name:"Enforcer 3",weeks:13,hours:16},{name:"Enforcer 4",weeks:13,hours:20},{name:"Enforcer 5",weeks:13,hours:20},{name:"Enforcer 6",weeks:13,hours:16}],
+          rate:15, extraLabel:"11/25 & 11/26 coverage", extra:{weeks:1,hours:48}, totalWoHolidays:21840, total:21840},
+        spring:{enforcers:[{name:"Enforcer 1",weeks:14,hours:20},{name:"Enforcer 2",weeks:14,hours:20},{name:"Enforcer 3",weeks:14,hours:16},{name:"Enforcer 4",weeks:14,hours:20},{name:"Enforcer 5",weeks:14,hours:20},{name:"Enforcer 6",weeks:14,hours:16}],
+          rate:15, extraLabel:"Spring Break Week", extra:{weeks:1,hours:0}, totalWoHolidays:23520, total:22830}}
+    ]
+  }
+};
+
+/* ============================================================
    SEED DATA — PAYROLL (Fund 52100)
    ============================================================ */
 var SEED_PAYROLL = [
@@ -659,21 +703,18 @@ var SEED_PAYROLL = [
   notes:"Contract staff: Phil H, Steve W, Steven L. Required figure reflects the $17.50/hr scenario (see detail).",
   po:"",status:"Forecast",encumbered:0,paid:0,
   forecastCalc:{weeks:3,hours:43,rate:16,fringePct:1},
-  scenarios:[
-    {rate:16.00,total:36106.78},
-    {rate:16.50,total:37235.12},
-    {rate:17.00,total:38363.45},
-    {rate:17.50,total:39491.79,selected:true}
-  ]},
+  contracts: clone(PAYROLL_WORKSHEET_DEFAULTS.ambassadors.contracts),
+  contractsNote: PAYROLL_WORKSHEET_DEFAULTS.ambassadors.contractsNote,
+  scenarios: clone(PAYROLL_WORKSHEET_DEFAULTS.ambassadors.scenarios).map(function(s,i){ s.selected = (i===3); return s; })},
  {id:"enforcers",label:"Student Parking Enforcers",required:32970,requiredIsText:false,requested:5640,
   notes:"Request to increase staffing to bring back east and evening coverage. Required = \"Need\" tier; Requested = step up to \"Want\" tier.",
   po:"",status:"Forecast",encumbered:0,paid:0,
   forecastCalc:{weeks:0,hours:93,rate:15,fringePct:0},
-  tiers:[
-    {name:"Need",fall:16380,spring:16590,fy:32970,selected:"required"},
-    {name:"Want",fall:18840,spring:19770,fy:38610,selected:"requested"},
-    {name:"Best",fall:21840,spring:22830,fy:44670}
-  ]}
+  tiers: clone(PAYROLL_WORKSHEET_DEFAULTS.enforcers.tiers).map(function(t){
+    t.fy = t.fall.total + t.spring.total;
+    t.selected = t.name==="Need" ? "required" : (t.name==="Want" ? "requested" : undefined);
+    return t;
+  })}
 ];
 
 var SEED_ADDL_STAFF = [];
@@ -931,6 +972,26 @@ function normalizePayroll(list, oldForecastRows){
       it.forecastCalc = old ? {weeks:old.weeks,hours:old.hours,rate:old.rate,fringePct:old.fringePct} : null;
     }
     delete it.forecastRowId;
+    /* Backfill the per-person/per-enforcer worksheet breakdown onto older saved sessions that
+       only ever stored the rolled-up scenario/tier totals (from before the detail was added). */
+    if(it.id==="ambassadors"){
+      if(it.contracts===undefined) it.contracts = clone(PAYROLL_WORKSHEET_DEFAULTS.ambassadors.contracts);
+      if(it.contractsNote===undefined) it.contractsNote = PAYROLL_WORKSHEET_DEFAULTS.ambassadors.contractsNote;
+      if(it.scenarios && it.scenarios.length){
+        it.scenarios.forEach(function(s){
+          if(s.people) return;
+          var d = PAYROLL_WORKSHEET_DEFAULTS.ambassadors.scenarios.filter(function(x){return x.rate===s.rate;})[0];
+          if(d){ s.people=clone(d.people); s.weeks=d.weeks; s.subtotal=d.subtotal; s.fringe=d.fringe; }
+        });
+      }
+    }
+    if(it.id==="enforcers" && it.tiers && it.tiers.length){
+      it.tiers.forEach(function(t){
+        if(t.fall && typeof t.fall==="object" && t.fall.enforcers) return;
+        var d = PAYROLL_WORKSHEET_DEFAULTS.enforcers.tiers.filter(function(x){return x.name===t.name;})[0];
+        if(d){ t.fall=clone(d.fall); t.spring=clone(d.spring); }
+      });
+    }
   });
   return list;
 }
@@ -1397,6 +1458,47 @@ function itemForecastTotal(it){
 }
 function forecastTotal(){ return payrollItems.reduce(function(a,it){ return a+itemForecastTotal(it); },0); }
 
+/* Full source-worksheet breakdown for the Ambassadors (per-person, per-rate-scenario) and
+   Student Parking Enforcers (per-enforcer, per-semester, per-tier) payroll lines — the same
+   detail the FY budget draft workbook's Ambassador Worksheet / Parking Enforcement Worksheet
+   tabs carried. Renders under the existing rate-detail table when present. */
+function payWorksheetHtml(it){
+  var out = "";
+  if(it.id==="ambassadors" && it.contracts){
+    out += '<div class="pay-scen-subhead">Current contract amounts</div>'+
+      '<table class="pay-scen-table"><thead><tr><th>Person</th><th>Contract amount</th></tr></thead><tbody>'+
+      it.contracts.map(function(c){ return '<tr><td>'+esc(c.name)+'</td><td>'+money(c.amount)+'</td></tr>'; }).join("")+
+      '<tr><td><b>Grand total</b></td><td><b>'+money(it.contracts.reduce(function(a,c){return a+(Number(c.amount)||0);},0))+'</b></td></tr>'+
+      '</tbody></table>'+
+      (it.contractsNote?'<div class="pay-card-note" style="margin-top:4px;">'+esc(it.contractsNote)+'</div>':"");
+    (it.scenarios||[]).forEach(function(s){
+      if(!s.people) return;
+      out += '<div class="pay-scen-subhead">$'+s.rate.toFixed(2)+'/hr scenario'+(s.selected?" — selected":"")+'</div>'+
+        '<table class="pay-scen-table"><thead><tr><th>Person</th><th>Hourly rate</th><th>Hours/wk</th><th>Weekly pay</th><th>Weeks</th><th>Subtotal</th></tr></thead><tbody>'+
+        s.people.map(function(p){ return '<tr><td>'+esc(p.name)+'</td><td>$'+s.rate.toFixed(2)+'</td><td>'+p.hours+'</td><td>'+money(s.rate*p.hours)+'</td><td>'+s.weeks+'</td><td>'+money(s.rate*p.hours*s.weeks)+'</td></tr>'; }).join("")+
+        '<tr><td colspan="5"><b>Subtotal</b></td><td><b>'+money(s.subtotal)+'</b></td></tr>'+
+        '<tr><td colspan="5">Fringe</td><td>'+money(s.fringe)+'</td></tr>'+
+        '<tr class="sel"><td colspan="5"><b>Total</b></td><td><b>'+money(s.total)+'</b></td></tr>'+
+        '</tbody></table>';
+    });
+  }
+  if(it.id==="enforcers" && it.tiers){
+    it.tiers.forEach(function(t){
+      if(!t.fall || !t.fall.enforcers) return;
+      out += '<div class="pay-scen-subhead">'+esc(t.name)+' tier'+(t.selected==="required"?" — Required":(t.selected==="requested"?" — Requested":""))+'</div>';
+      [["Fall",t.fall],["Spring",t.spring]].forEach(function(pair){
+        var label=pair[0], sem=pair[1];
+        out += '<table class="pay-scen-table"><thead><tr><th>'+label+'</th><th>Weeks</th><th>Hours/wk</th><th>Pay/hr</th><th>Total</th></tr></thead><tbody>'+
+          sem.enforcers.map(function(e){ return '<tr><td>'+esc(e.name)+'</td><td>'+e.weeks+'</td><td>'+e.hours+'</td><td>$'+sem.rate.toFixed(2)+'</td><td>'+money(e.weeks*e.hours*sem.rate)+'</td></tr>'; }).join("")+
+          '<tr><td>'+esc(sem.extraLabel)+'</td><td>'+sem.extra.weeks+'</td><td>'+sem.extra.hours+'</td><td>$'+sem.rate.toFixed(2)+'</td><td>'+money(sem.extra.weeks*sem.extra.hours*sem.rate)+'</td></tr>'+
+          '<tr><td colspan="4">Subtotal (w/o holiday adj.)</td><td>'+money(sem.totalWoHolidays)+'</td></tr>'+
+          '<tr class="sel"><td colspan="4"><b>'+label+' total</b></td><td><b>'+money(sem.total)+'</b></td></tr>'+
+          '</tbody></table>';
+      });
+    });
+  }
+  return out;
+}
 function renderPayroll(){
   var payReq=payRequiredTotal(), payReqAsk=payRequestedTotal();
   var payBase=Number(baseBudget.payroll)||0;
@@ -1431,12 +1533,12 @@ function renderPayroll(){
     if(openPayDetail[it.id] && it.scenarios){
       detailBlock = '<table class="pay-scen-table"><thead><tr><th>Hourly rate</th><th>Annual total (incl. fringe)</th></tr></thead><tbody>'+
         it.scenarios.map(function(s){ return '<tr class="'+(s.selected?"sel":"")+'"><td>$'+s.rate.toFixed(2)+'/hr</td><td>'+money(s.total)+(s.selected?' — selected':'')+'</td></tr>'; }).join("")+
-        '</tbody></table>';
+        '</tbody></table>'+payWorksheetHtml(it);
     }
     if(openPayDetail[it.id] && it.tiers){
       detailBlock = '<table class="pay-scen-table"><thead><tr><th>Tier</th><th>Fall</th><th>Spring</th><th>FY total</th></tr></thead><tbody>'+
-        it.tiers.map(function(t){ return '<tr class="'+(t.selected?"sel":"")+'"><td>'+t.name+(t.selected==="required"?" (Required)":(t.selected==="requested"?" (Requested)":"")) +'</td><td>'+money(t.fall)+'</td><td>'+money(t.spring)+'</td><td>'+money(t.fy)+'</td></tr>'; }).join("")+
-        '</tbody></table>';
+        it.tiers.map(function(t){ return '<tr class="'+(t.selected?"sel":"")+'"><td>'+t.name+(t.selected==="required"?" (Required)":(t.selected==="requested"?" (Requested)":"")) +'</td><td>'+money(t.fall&&t.fall.total!=null?t.fall.total:t.fall)+'</td><td>'+money(t.spring&&t.spring.total!=null?t.spring.total:t.spring)+'</td><td>'+money(t.fy)+'</td></tr>'; }).join("")+
+        '</tbody></table>'+payWorksheetHtml(it);
     }
     var fcBlock="";
     if(openPayForecast[it.id] && it.forecastCalc){
@@ -2088,6 +2190,73 @@ async function exportBudgetExcel(){
   p.getCell(prow,1).value = "FY"+fy+" Budget"; xlMoneyCell(p,prow,2,payBase); prow++;
   p.getCell(prow,1).value = "Surplus/Deficit"; p.getCell(prow,1).font={bold:true};
   xlMoneyCell(p,prow,2,payBase-pay.required).font={bold:true};
+
+  /* ---------- Ambassador Worksheet sheet (per-person, per-rate-scenario detail) ---------- */
+  var ambIt = payrollItems.filter(function(it){ return it.id==="ambassadors"; })[0];
+  if(ambIt && ambIt.contracts){
+    var aw = wb.addWorksheet("Ambassador Worksheet");
+    aw.columns = [{width:16},{width:13},{width:13},{width:13},{width:9},{width:14},{width:40}];
+    aw.getCell(1,1).value = "Ambassadors — current contracts"; aw.getCell(1,1).font={bold:true,size:12,color:{argb:XL_NAVY}};
+    xlHeaderRow(aw, 2, ["Person","Contract amount"], XL_PAPER, XL_NAVY);
+    var arow=3;
+    ambIt.contracts.forEach(function(c){ aw.getCell(arow,1).value=c.name; xlMoneyCell(aw,arow,2,c.amount); arow++; });
+    aw.getCell(arow,1).value="Grand total"; aw.getCell(arow,1).font={bold:true};
+    xlMoneyCell(aw,arow,2,ambIt.contracts.reduce(function(a,c){return a+(Number(c.amount)||0);},0)).font={bold:true};
+    if(ambIt.contractsNote){ arow++; aw.getCell(arow,1).value=ambIt.contractsNote; aw.getCell(arow,1).font={italic:true,size:9,color:{argb:"FF8B8472"}}; }
+    arow+=2;
+    (ambIt.scenarios||[]).forEach(function(s){
+      if(!s.people) return;
+      aw.getCell(arow,1).value = "$"+s.rate.toFixed(2)+"/hr scenario"+(s.selected?" (selected)":"");
+      aw.getCell(arow,1).font = {bold:true, size:12, color:{argb:XL_NAVY}};
+      arow++;
+      xlHeaderRow(aw, arow, ["Person","Hourly rate","Hours/wk","Weekly pay","Weeks","Subtotal"], XL_PAPER, XL_NAVY);
+      arow++;
+      s.people.forEach(function(p2){
+        aw.getCell(arow,1).value=p2.name; xlMoneyCell(aw,arow,2,s.rate); aw.getCell(arow,3).value=p2.hours;
+        xlMoneyCell(aw,arow,4,s.rate*p2.hours); aw.getCell(arow,5).value=s.weeks; xlMoneyCell(aw,arow,6,s.rate*p2.hours*s.weeks);
+        arow++;
+      });
+      aw.getCell(arow,1).value="Subtotal"; xlMoneyCell(aw,arow,6,s.subtotal); arow++;
+      aw.getCell(arow,1).value="Fringe"; xlMoneyCell(aw,arow,6,s.fringe); arow++;
+      aw.getCell(arow,1).value="Total"; aw.getCell(arow,1).font={bold:true};
+      xlMoneyCell(aw,arow,6,s.total).font={bold:true};
+      arow+=2;
+    });
+  }
+
+  /* ---------- Parking Enforcement Worksheet sheet (per-enforcer, per-semester, per-tier) ---------- */
+  var enfIt = payrollItems.filter(function(it){ return it.id==="enforcers"; })[0];
+  if(enfIt && enfIt.tiers){
+    var pe = wb.addWorksheet("Parking Enforcement Worksheet");
+    pe.columns = [{width:26},{width:9},{width:11},{width:10},{width:13}];
+    var erow=1;
+    enfIt.tiers.forEach(function(t){
+      if(!t.fall || !t.fall.enforcers) return;
+      pe.getCell(erow,1).value = t.name+" tier"+(t.selected==="required"?" — Required":(t.selected==="requested"?" — Requested":""));
+      pe.getCell(erow,1).font = {bold:true, size:13, color:{argb:XL_NAVY}};
+      erow++;
+      [["Fall",t.fall],["Spring",t.spring]].forEach(function(pair){
+        var label=pair[0], sem=pair[1];
+        xlHeaderRow(pe, erow, [label,"Weeks","Hours/wk","Pay/hr","Total"], XL_PAPER, XL_NAVY);
+        erow++;
+        sem.enforcers.forEach(function(e){
+          pe.getCell(erow,1).value=e.name; pe.getCell(erow,2).value=e.weeks; pe.getCell(erow,3).value=e.hours;
+          xlMoneyCell(pe,erow,4,sem.rate); xlMoneyCell(pe,erow,5,e.weeks*e.hours*sem.rate);
+          erow++;
+        });
+        pe.getCell(erow,1).value=sem.extraLabel; pe.getCell(erow,2).value=sem.extra.weeks; pe.getCell(erow,3).value=sem.extra.hours;
+        xlMoneyCell(pe,erow,4,sem.rate); xlMoneyCell(pe,erow,5,sem.extra.weeks*sem.extra.hours*sem.rate);
+        erow++;
+        pe.getCell(erow,1).value="Subtotal (w/o holiday adj.)"; xlMoneyCell(pe,erow,5,sem.totalWoHolidays); erow++;
+        pe.getCell(erow,1).value=label+" total"; pe.getCell(erow,1).font={bold:true};
+        xlMoneyCell(pe,erow,5,sem.total).font={bold:true};
+        erow+=2;
+      });
+      pe.getCell(erow,1).value="Fiscal year total"; pe.getCell(erow,1).font={bold:true};
+      xlMoneyCell(pe,erow,5, t.fall.total+t.spring.total).font={bold:true};
+      erow+=2;
+    });
+  }
 
   var buf = await wb.xlsx.writeBuffer();
   var blob = new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
