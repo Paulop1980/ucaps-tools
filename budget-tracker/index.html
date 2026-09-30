@@ -854,12 +854,31 @@ function budgetLinksFor(licId){
 /* Keep status in sync between a license and any budget line items linked to it — since
    both use the same Forecast/Encumbrance/Paid vocabulary now, changing one should change the other. */
 function syncStatusFromLicense(lic){
-  budgetLinksFor(lic.id).forEach(function(b){ b.status = lic.status; });
+  budgetLinksFor(lic.id).forEach(function(b){
+    b.status = lic.status;
+    /* Also push the license's dollar amount onto the linked budget item, so the Paid/Encumbered
+       figures (and therefore the Overview dashboard) actually move when a license is marked
+       renewed/paid — not just the status label. Skip items that manage their own invoice ledger
+       (draws) since those already compute paid/encumbered from recomputeItemDerived(). */
+    if(!(b.draws||[]).length){
+      var amt = round2(lic.amount);
+      if(lic.status==="Paid"){ b.paid = amt; b.encumbered = 0; }
+      else if(lic.status==="Encumbrance"){ b.encumbered = amt; b.paid = 0; }
+      else { b.paid = 0; b.encumbered = 0; }
+    }
+  });
 }
 function syncStatusFromBudgetItem(it){
   if(!it.licenseId) return;
   var lic = licById(it.licenseId);
   if(lic) lic.status = it.status;
+}
+/* One-time reconciliation run after loading saved data: older saved sessions may have a license
+   marked Paid/Encumbrance whose linked budget item's dollar paid/encumbered never got pushed
+   (that used to only happen status-wise). Re-run the sync for every license with links so the
+   dashboard totals self-heal on next load without the user having to re-touch each license. */
+function reconcileLicenseBudgetLinks(){
+  licItems.forEach(function(lic){ if(budgetLinksFor(lic.id).length) syncStatusFromLicense(lic); });
 }
 
 /* ============================================================
@@ -929,6 +948,7 @@ function loadAll(){
         summit = s.summit || summit;
         payrollPostings = (s.payrollPostings && s.payrollPostings.length) ? s.payrollPostings : clone(SEED_PAYROLL_POSTINGS);
         fy = s.fy || fy;
+        reconcileLicenseBudgetLinks();
         return;
       }catch(e){}
     }
@@ -938,6 +958,7 @@ function loadAll(){
     licItems = normalizeLic(clone(LIC_SEED));
     baseBudget = clone(BASE_BUDGET_DEFAULT);
     payrollPostings = clone(SEED_PAYROLL_POSTINGS);
+    reconcileLicenseBudgetLinks();
   });
 }
 function syncFYInput(){ var el=document.getElementById("fy-input"); if(el) el.value=fy; }
@@ -1944,6 +1965,7 @@ function handleJSONImport(file){
     summit = parsed.summit || summit;
     payrollPostings = (parsed.payrollPostings && parsed.payrollPostings.length) ? parsed.payrollPostings : clone(SEED_PAYROLL_POSTINGS);
     if(parsed.fy) fy = Number(parsed.fy)||fy;
+    reconcileLicenseBudgetLinks();
     saveAll(); closeDrawer(); syncFYInput(); renderCurrentTab();
     flash("Imported");
   };
