@@ -1,36 +1,36 @@
 -- UCAPS Register Tracker — Supabase schema
--- Every table is locked to signed-in users whose email is in reg_users.
+-- Every table is locked to signed-in users whose email is in ucaps_users.
 -- The public (anon) key alone can read nothing.
 
 -- Permission checks live in a private schema so they aren't exposed as API endpoints.
-create schema if not exists reg_private;
-revoke all on schema reg_private from public, anon;
-grant usage on schema reg_private to authenticated;
+create schema if not exists ucaps_private;
+revoke all on schema ucaps_private from public, anon;
+grant usage on schema ucaps_private to authenticated;
 
--- ---------- approved users ----------
-create table if not exists public.reg_users (
+-- ---------- approved users (shared by every UCAPS tool) ----------
+create table if not exists public.ucaps_users (
   email      text primary key check (email = lower(email)),
   name       text,
   is_admin   boolean not null default false,
   added_at   timestamptz not null default now()
 );
 
-create or replace function reg_private.reg_is_allowed()
+create or replace function ucaps_private.is_approved()
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.reg_users u
+  select exists (select 1 from public.ucaps_users u
                  where u.email = lower(coalesce(auth.jwt() ->> 'email', '')));
 $$;
 
-create or replace function reg_private.reg_is_admin()
+create or replace function ucaps_private.is_admin()
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.reg_users u
+  select exists (select 1 from public.ucaps_users u
                  where u.email = lower(coalesce(auth.jwt() ->> 'email', '')) and u.is_admin);
 $$;
 
-revoke all on function reg_private.reg_is_allowed() from public, anon;
-revoke all on function reg_private.reg_is_admin()   from public, anon;
-grant execute on function reg_private.reg_is_allowed() to authenticated;
-grant execute on function reg_private.reg_is_admin()   to authenticated;
+revoke all on function ucaps_private.is_approved() from public, anon;
+revoke all on function ucaps_private.is_admin()   from public, anon;
+grant execute on function ucaps_private.is_approved() to authenticated;
+grant execute on function ucaps_private.is_admin()   to authenticated;
 
 -- ---------- devices (fields keyed by the source CSV column names) ----------
 create table if not exists public.reg_devices (
@@ -96,7 +96,7 @@ create table if not exists public.reg_rounds (
 );
 
 -- ---------- row level security ----------
-alter table public.reg_users    enable row level security;
+alter table public.ucaps_users    enable row level security;
 alter table public.reg_devices  enable row level security;
 alter table public.reg_tests    enable row level security;
 alter table public.reg_issues   enable row level security;
@@ -104,28 +104,28 @@ alter table public.reg_history  enable row level security;
 alter table public.reg_settings enable row level security;
 alter table public.reg_rounds   enable row level security;
 
-create policy "approved users read users"  on public.reg_users for select to authenticated using ((select reg_private.reg_is_allowed()));
-create policy "admins add users"           on public.reg_users for insert to authenticated with check ((select reg_private.reg_is_admin()));
-create policy "admins update users"        on public.reg_users for update to authenticated using ((select reg_private.reg_is_admin())) with check ((select reg_private.reg_is_admin()));
-create policy "admins remove users"        on public.reg_users for delete to authenticated using ((select reg_private.reg_is_admin()));
+create policy "approved users read users"  on public.ucaps_users for select to authenticated using ((select ucaps_private.is_approved()));
+create policy "admins add users"           on public.ucaps_users for insert to authenticated with check ((select ucaps_private.is_admin()));
+create policy "admins update users"        on public.ucaps_users for update to authenticated using ((select ucaps_private.is_admin())) with check ((select ucaps_private.is_admin()));
+create policy "admins remove users"        on public.ucaps_users for delete to authenticated using ((select ucaps_private.is_admin()));
 
-create policy "approved users" on public.reg_devices  for all to authenticated using ((select reg_private.reg_is_allowed())) with check ((select reg_private.reg_is_allowed()));
-create policy "approved users" on public.reg_tests    for all to authenticated using ((select reg_private.reg_is_allowed())) with check ((select reg_private.reg_is_allowed()));
-create policy "approved users" on public.reg_issues   for all to authenticated using ((select reg_private.reg_is_allowed())) with check ((select reg_private.reg_is_allowed()));
-create policy "approved users" on public.reg_history  for all to authenticated using ((select reg_private.reg_is_allowed())) with check ((select reg_private.reg_is_allowed()));
-create policy "approved users" on public.reg_rounds   for all to authenticated using ((select reg_private.reg_is_allowed())) with check ((select reg_private.reg_is_allowed()));
-create policy "approved users read settings" on public.reg_settings for select to authenticated using ((select reg_private.reg_is_allowed()));
-create policy "admins add settings"    on public.reg_settings for insert to authenticated with check ((select reg_private.reg_is_admin()));
-create policy "admins update settings" on public.reg_settings for update to authenticated using ((select reg_private.reg_is_admin())) with check ((select reg_private.reg_is_admin()));
+create policy "approved users" on public.reg_devices  for all to authenticated using ((select ucaps_private.is_approved())) with check ((select ucaps_private.is_approved()));
+create policy "approved users" on public.reg_tests    for all to authenticated using ((select ucaps_private.is_approved())) with check ((select ucaps_private.is_approved()));
+create policy "approved users" on public.reg_issues   for all to authenticated using ((select ucaps_private.is_approved())) with check ((select ucaps_private.is_approved()));
+create policy "approved users" on public.reg_history  for all to authenticated using ((select ucaps_private.is_approved())) with check ((select ucaps_private.is_approved()));
+create policy "approved users" on public.reg_rounds   for all to authenticated using ((select ucaps_private.is_approved())) with check ((select ucaps_private.is_approved()));
+create policy "approved users read settings" on public.reg_settings for select to authenticated using ((select ucaps_private.is_approved()));
+create policy "admins add settings"    on public.reg_settings for insert to authenticated with check ((select ucaps_private.is_admin()));
+create policy "admins update settings" on public.reg_settings for update to authenticated using ((select ucaps_private.is_admin())) with check ((select ucaps_private.is_admin()));
 
-revoke all on public.reg_users, public.reg_devices, public.reg_tests, public.reg_issues,
+revoke all on public.ucaps_users, public.reg_devices, public.reg_tests, public.reg_issues,
               public.reg_history, public.reg_settings, public.reg_rounds from anon;
 
 -- ---------- live updates ----------
 alter publication supabase_realtime add table
   public.reg_devices, public.reg_tests, public.reg_issues, public.reg_history,
-  public.reg_settings, public.reg_rounds, public.reg_users;
+  public.reg_settings, public.reg_rounds, public.ucaps_users;
 
 -- First admin (edit before running on a fresh project). Register data is loaded
 -- through the app's CSV import, never committed to this public repo.
--- insert into public.reg_users(email, name, is_admin) values ('you@uml.edu', 'Your Name', true);
+-- insert into public.ucaps_users(email, name, is_admin) values ('you@uml.edu', 'Your Name', true);
