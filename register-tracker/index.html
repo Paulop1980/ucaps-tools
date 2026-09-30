@@ -199,7 +199,7 @@ textarea{font-weight:400}
 <script>
 "use strict";
 /* Public project URL + publishable key. Safe to ship: every table is locked by row-level security
-   to signed-in users on the approved list (reg_users). */
+   to signed-in users on the approved list (ucaps_users, shared by all UCAPS tools). */
 const SUPABASE_URL = "https://hcqedahzjtksndaxeczd.supabase.co";
 const SUPABASE_KEY = "sb_publishable_CeEkIIgVUc0WUJtZ8c7zwA_Y6j1Rhi_";
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {auth:{persistSession:true,detectSessionInUrl:true,flowType:"pkce"}});
@@ -274,9 +274,9 @@ async function boot(){
   const {data:{session}}=await sb.auth.getSession();
   if(!session){ showLogin(); return; }
   const email=(session.user.email||"").toLowerCase();
-  const {data,error}=await sb.from("reg_users").select("*").eq("email",email).maybeSingle();
+  const {data,error}=await sb.from("ucaps_users").select("*").eq("email",email).maybeSingle();
   if(error||!data){ $("#nav").hidden=true; $("#who").hidden=false; $("#whoName").textContent=email;
-    $("#main").innerHTML=`<div class="card pad login"><h2>Not on the approved list</h2><p class="sub"><b>${esc(email)}</b> is signed in but hasn't been approved for the Register Tracker. Ask a UCAPS admin to add you under Data &amp; settings → Approved users.</p></div>`; return; }
+    $("#main").innerHTML=`<div class="card pad login"><h2>Not on the approved list</h2><p class="sub"><b>${esc(email)}</b> is signed in but hasn't been approved for the Register Tracker. Ask a UCAPS admin to add you under Register Tracker → Data &amp; settings → Approved users.</p></div>`; return; }
   ME=data; $("#nav").hidden=false; $("#who").hidden=false; $("#whoName").textContent=myName();
   await loadAll(); render(); subscribe();
 }
@@ -287,7 +287,7 @@ sb.auth.onAuthStateChange((ev)=>{ if(ev==="SIGNED_IN" && !ME) boot(); });
 let S={devices:[],settings:DEFAULT_SETTINGS,round:null,pastRounds:[],users:[]};
 async function loadAll(){
   const q=(t,o)=>sb.from(t).select("*").order(o||"id").range(0,9999);
-  const [dv,ts,is,hs,st,rd,us]=await Promise.all([q("reg_devices","created_at"),q("reg_tests","tested_at"),q("reg_issues","opened_at"),q("reg_history","at"),sb.from("reg_settings").select("*").eq("id",1).maybeSingle(),q("reg_rounds","started_at"),q("reg_users","email")]);
+  const [dv,ts,is,hs,st,rd,us]=await Promise.all([q("reg_devices","created_at"),q("reg_tests","tested_at"),q("reg_issues","opened_at"),q("reg_history","at"),sb.from("reg_settings").select("*").eq("id",1).maybeSingle(),q("reg_rounds","started_at"),q("ucaps_users","email")]);
   const err=[dv,ts,is,hs,st,rd,us].find(r=>r.error); if(err){ toast("Load failed: "+err.error.message); return; }
   const by=(rows,k)=>{const m={};rows.forEach(r=>(m[r[k]]=m[r[k]]||[]).push(r));return m;};
   const T=by(ts.data,"device_id"), I=by(is.data,"device_id"), H=by(hs.data,"device_id");
@@ -314,7 +314,7 @@ async function addHistory(d,h){ d.history.push(h); return run(sb.from("reg_histo
 let reloadT=null, pending=false, suppressUntil=0;
 function subscribe(){
   const ch=sb.channel("reg-live");
-  ["reg_devices","reg_tests","reg_issues","reg_history","reg_settings","reg_rounds","reg_users"].forEach(t=>ch.on("postgres_changes",{event:"*",schema:"public",table:t},()=>{ clearTimeout(reloadT); reloadT=setTimeout(liveReload,700); }));
+  ["reg_devices","reg_tests","reg_issues","reg_history","reg_settings","reg_rounds","ucaps_users"].forEach(t=>ch.on("postgres_changes",{event:"*",schema:"public",table:t},()=>{ clearTimeout(reloadT); reloadT=setTimeout(liveReload,700); }));
   ch.subscribe(st=>{ const l=$("#live"); l.classList.toggle("on",st==="SUBSCRIBED"); l.title=st==="SUBSCRIBED"?"Live: changes from your team appear automatically":"Live sync "+st.toLowerCase(); });
 }
 async function liveReload(){
@@ -698,7 +698,7 @@ function renderData(){
     <div class="card pad"><h3 style="margin:0 0 10px;font-size:15px">Thresholds</h3>
       <div class="row2"><label>Test every (days)<input type="number" min="1" id="sInt" value="${S.settings.intervalDays}" ${dis}></label><label>UPS battery life (years)<input type="number" min="0.5" step="0.5" id="sUps" value="${S.settings.upsYears}" ${dis}></label><label>Flag record stale after (days)<input type="number" min="1" id="sStale" value="${S.settings.staleDays}" ${dis}></label></div>
       ${adm?`<button class="btn" id="sSave">Save thresholds</button>`:""}</div>
-    <div class="card" style="grid-column:1/-1"><div class="sect-h">Approved users <span>${S.users.length} can sign in</span></div>
+    <div class="card" style="grid-column:1/-1"><div class="sect-h">Approved users — all UCAPS tools <span>${S.users.length} can sign in</span></div>
       <ul class="list">${S.users.map(u=>`<li style="cursor:default"><div class="grow"><div class="t">${esc(u.name||u.email)}${u.email===ME.email?" (you)":""}</div><div class="d">${esc(u.email)}</div></div>${u.is_admin?`<span class="chip acc">Admin</span>`:""}${adm&&u.email!==ME.email?`<button class="btn sm" data-uadm="${esc(u.email)}">${u.is_admin?"Remove admin":"Make admin"}</button><button class="btn sm danger" data-udel="${esc(u.email)}">Remove</button>`:""}</li>`).join("")}</ul>
       ${adm?`<form id="uAdd" class="pad" style="display:flex;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line)"><input type="email" id="uEmail" placeholder="email@uml.edu" required style="flex:1;min-width:200px"><input type="text" id="uName" placeholder="Name" style="flex:1;min-width:140px"><button class="btn pri">Add user</button></form>`:""}</div>
     <div class="card pad" style="grid-column:1/-1"><h3 style="margin:0 0 6px;font-size:15px">Test checklists</h3><p class="small">One item per line. Changes apply to future tests; past tests keep the checklist they were run with.</p>
@@ -716,9 +716,9 @@ function renderData(){
     $("#clSave").onclick=()=>{ document.querySelectorAll("[data-cl]").forEach(t=>S.settings.checklists[t.dataset.cl]=t.value.split("\n").map(s=>s.trim()).filter(Boolean)); saveSettings("Checklists saved"); };
     $("#clReset").onclick=async()=>{ if(!confirm("Restore the default checklists?"))return; S.settings.checklists=JSON.parse(JSON.stringify(DEFAULT_CHECKLISTS)); await saveSettings("Defaults restored"); renderData(); };
     $("#uAdd").onsubmit=async e=>{ e.preventDefault(); const email=$("#uEmail").value.trim().toLowerCase(), name=$("#uName").value.trim()||null; if(S.users.some(u=>u.email===email)){toast("Already on the list");return;}
-      if(await run(sb.from("reg_users").insert({email,name}),`${email} can now sign in`)){ S.users.push({email,name,is_admin:false}); renderData(); } };
-    $("#main").querySelectorAll("[data-udel]").forEach(b=>b.onclick=async()=>{ const em=b.dataset.udel; if(!confirm(`Remove ${em}? They'll lose access immediately.`))return; if(await run(sb.from("reg_users").delete().eq("email",em),"User removed")){ S.users=S.users.filter(u=>u.email!==em); renderData(); } });
-    $("#main").querySelectorAll("[data-uadm]").forEach(b=>b.onclick=async()=>{ const u=S.users.find(x=>x.email===b.dataset.uadm); if(await run(sb.from("reg_users").update({is_admin:!u.is_admin}).eq("email",u.email))){ u.is_admin=!u.is_admin; renderData(); } });
+      if(await run(sb.from("ucaps_users").insert({email,name}),`${email} can now sign in`)){ S.users.push({email,name,is_admin:false}); renderData(); } };
+    $("#main").querySelectorAll("[data-udel]").forEach(b=>b.onclick=async()=>{ const em=b.dataset.udel; if(!confirm(`Remove ${em}? They'll lose access immediately.`))return; if(await run(sb.from("ucaps_users").delete().eq("email",em),"User removed")){ S.users=S.users.filter(u=>u.email!==em); renderData(); } });
+    $("#main").querySelectorAll("[data-uadm]").forEach(b=>b.onclick=async()=>{ const u=S.users.find(x=>x.email===b.dataset.uadm); if(await run(sb.from("ucaps_users").update({is_admin:!u.is_admin}).eq("email",u.email))){ u.is_admin=!u.is_admin; renderData(); } });
   }
   $("#main").querySelectorAll("[data-restore]").forEach(b=>b.onclick=async()=>{ const d=S.devices.find(x=>x.id===b.dataset.restore); d.active=true; renderData(); if(await run(sb.from("reg_devices").update(devRow(d)).eq("id",d.id),"Device restored")) await addHistory(d,{at:nowISO(),by:myName(),kind:"restored",note:"Device restored"}); });
 }

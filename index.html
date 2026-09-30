@@ -662,12 +662,17 @@ footer {
   <div class="footer-right">
     For tool issues, contact Evan Fallon<br>
     or open a request through UCAPS
+    <div id="ucapsWho" style="margin-top:8px;display:none">Signed in as <span id="ucapsWhoName"></span> · <a href="#" id="ucapsOut" style="color:inherit">Sign out</a></div>
   </div>
 </footer>
 
 <script>
   // Password gate
-  if (typeof ucapsGate === 'function') ucapsGate();
+  if (typeof ucapsGate === 'function') ucapsGate().then(u => {
+    document.getElementById('ucapsWhoName').textContent = u.name || u.email;
+    document.getElementById('ucapsWho').style.display = 'block';
+    document.getElementById('ucapsOut').onclick = e => { e.preventDefault(); ucapsSignOut(); };
+  });
 
   // Set last updated date
   document.getElementById('lastUpdated').textContent =
