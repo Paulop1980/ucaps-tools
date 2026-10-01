@@ -658,7 +658,7 @@ var SEED_BUDGET = [
   notes:"To pay for KeyWatcher integration with Lenel.",internalNotes:"",licenseId:null,po:"",status:"Forecast",encumbered:0,paid:0}
 ];
 
-var BASE_BUDGET_DEFAULT = { operating:220408.5, payroll:76698 };
+var BASE_BUDGET_DEFAULT = { operating:220408.5, payroll:77500 };   // payroll: FY27 starting budget for fund 52110 per the encumbrance report
 
 /* ============================================================
    PAYROLL WORKSHEET DETAIL — sourced from the FY27 budget draft
@@ -1019,6 +1019,7 @@ function loadAll(){
         addlStaff = (s.addlStaff && s.addlStaff.length) ? s.addlStaff : clone(SEED_ADDL_STAFF);
         licItems = (s.licItems && s.licItems.length) ? normalizeLic(s.licItems) : normalizeLic(clone(LIC_SEED));
         baseBudget = s.baseBudget || clone(BASE_BUDGET_DEFAULT);
+        if(Number(baseBudget.payroll)===76698) baseBudget.payroll = 77500;   // corrected FY27 starting budget
         overrides = s.overrides || { operating:{enc:null,bal:null}, payroll:{enc:null,bal:null} };
         if(!overrides.operating) overrides.operating={enc:null,bal:null};
         if(!overrides.payroll) overrides.payroll={enc:null,bal:null};
@@ -1538,9 +1539,21 @@ function plannerGroup(it){ return (plannerSummary && it && it.plannerLink) ? (pl
 function applyPlannerLinks(){
   if(!plannerSummary) return;
   var changed = false;
+  var paid = plannerSummary.paid || {};
   payrollItems.forEach(function(it){
     var g = plannerGroup(it);
     if(g && round2(it.encumbered)!==round2(g.encumbered)){ it.encumbered = round2(g.encumbered); changed = true; }
+    if(g && paid[it.plannerLink]!=null && round2(it.paid)!==round2(paid[it.plannerLink])){ it.paid = round2(paid[it.plannerLink]); changed = true; }
+  });
+  /* Monthly postings from the planner's Transaction Detail import fill months that are empty
+     (or were filled the same way before); hand-entered amounts are left alone. */
+  var post = plannerSummary.postings || {};
+  payrollPostings.forEach(function(p){
+    var k = String(p.month||"").slice(0,7);
+    if(post[k]==null) return;
+    if(p.amount==null || p.amount==="" || p.fromPlanner){
+      if(round2(p.amount)!==round2(post[k]) || !p.fromPlanner){ p.amount = round2(post[k]); p.fromPlanner = true; if(!p.notes) p.notes = "From Transaction Detail YTD"; changed = true; }
+    }
   });
   if(changed) saveAll();
 }
@@ -1732,7 +1745,7 @@ function renderPayPostings(){
 }
 function payPostingChange(id, field, value){
   var p = payrollPostings.filter(function(x){return x.id===id;})[0]; if(!p) return;
-  if(field==="amount"){ p.amount = value===""?null:(parseFloat(value)||0); }
+  if(field==="amount"){ p.amount = value===""?null:(parseFloat(value)||0); p.fromPlanner = false; }
   else { p.notes = value; }
   saveAll(); renderPayPostings();
 }

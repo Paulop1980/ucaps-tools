@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UCAPS Contract Payroll Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script src="../ucaps_shared.js"></script>
@@ -126,12 +127,14 @@ textarea{font-family:var(--f-num);font-size:.82rem;width:100%;min-height:220px;b
   <nav class="tabs" role="tablist">
     <button role="tab" data-tab="emp" aria-selected="true">Employees &amp; encumbrances</button>
     <button role="tab" data-tab="pp" aria-selected="false">Pay periods</button>
+    <button role="tab" data-tab="act" aria-selected="false">Actual pay</button>
     <button role="tab" data-tab="cap" aria-selected="false">Room to hire / adjust</button>
     <button role="tab" data-tab="set" aria-selected="false">Budget &amp; calendar</button>
   </nav>
 
   <section id="tab-emp" class="panel"></section>
   <section id="tab-pp" class="panel" hidden></section>
+  <section id="tab-act" class="panel" hidden></section>
   <section id="tab-cap" class="panel" hidden></section>
   <section id="tab-set" class="panel" hidden></section>
 </div>
@@ -150,7 +153,7 @@ const BASELINE = {
     winterBlackoutStart: '2026-12-24', winterBlackoutEnd: '2027-01-01',
     otherEncumbrances: [],
     holidays: [
-      ['2026-10-12','Indigenous Peoples’ Day'],['2026-11-11','Veterans Day'],['2026-11-26','Thanksgiving'],
+      ['2026-07-03','Independence Day (observed)'],['2026-09-07','Labor Day'],['2026-10-12','Indigenous Peoples’ Day'],['2026-11-11','Veterans Day'],['2026-11-26','Thanksgiving'],
       ['2026-11-27','Day after Thanksgiving'],['2026-12-25','Christmas Day'],['2027-01-01','New Year’s Day'],
       ['2027-01-18','MLK Day'],['2027-02-15','Presidents’ Day'],['2027-04-19','Patriots’ Day'],
       ['2027-05-31','Memorial Day'],['2027-06-18','Juneteenth (observed)']
@@ -424,7 +427,7 @@ function renderSet(){
   const st=S.settings;
   const f=(id,label,val,type='date',step)=>`<label class="field">${label}<input type="${type}" ${step?`step="${step}"`:''} id="set-${id}" data-s="${id}" value="${val}"></label>`;
   $('#tab-set').innerHTML=`<div class="grid2"><div>
-   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Every save also updates the Ambassadors, Student Parking Enforcers and Cell Phone Reimbursements lines on the FY Budget Tracker’s Payroll tab.</p>
+   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Importing a Transaction Detail on the Actual pay tab sets FYTD expended and Paid through for you. Every save also updates the Ambassadors, Student Parking Enforcers and Cell Phone Reimbursements lines on the FY Budget Tracker’s Payroll tab.</p>
    <div class="formgrid">${f('baseBudget','Base budget',st.baseBudget,'number','0.01')}${f('ytdExpended','FYTD expended',st.ytdExpended,'number','0.01')}${f('paidThrough','Paid through',st.paidThrough)}${f('effectiveDate','Hour changes start',st.effectiveDate)}${f('seasonalFringePct','Seasonal pension/ins. %',st.seasonalFringePct,'number','0.01')}${f('fyEnd','Fiscal year end',st.fyEnd)}</div>
    <p class="help" style="margin-top:10px">The 2.21% pension/insurance rate is taken from the 700804 lines. Interns have no fringe line.</p>
    <h3 style="margin-top:16px">Semesters &amp; breaks</h3>
@@ -452,6 +455,7 @@ function render(){
   if(activeTab==='emp') renderEmp(T);
   if(activeTab==='pp') renderPP(T);
   if(activeTab==='cap') renderCap(T);
+  if(activeTab==='act') renderAct();
   if(activeTab==='set') renderSet();
 }
 
@@ -460,7 +464,7 @@ document.querySelector('nav.tabs').addEventListener('click',ev=>{
   const b=ev.target.closest('button[data-tab]'); if(!b) return;
   activeTab=b.dataset.tab;
   document.querySelectorAll('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
-  ['emp','pp','cap','set'].forEach(t=>$('#tab-'+t).hidden=t!==activeTab);
+  ['emp','pp','act','cap','set'].forEach(t=>$('#tab-'+t).hidden=t!==activeTab);
   try{localStorage.setItem('ucaps-pay-tab',activeTab)}catch(e){}
   render();
 });
@@ -504,6 +508,7 @@ document.addEventListener('click',ev=>{
   if(a==='export'){ if(S) exportPlan(); return; }
   if(a==='import'){ $('#importfile').click(); return; }
   if(!S) return;
+  if(a==='txn-import'){ $('#txnfile').click(); return; }
   const e=findEmp(b);
   if(a==='toggle'){openRow=openRow===e.id?null:e.id;render();}
   if(a==='clearprop'){delete e.prop;commit();}
@@ -569,6 +574,115 @@ if(typeof ucapsGate==='function') ucapsGate().then(async()=>{
   render();
 });
 
+/* ---------- actual pay: Transaction Detail YTD import ----------
+   Reads the "Year to Date Transaction Detail" export (Expense Transactions) for fund 52110.
+   Only aggregates are kept (per person per pay period, per account, per month) — never raw rows. */
+const ACCT_GROUP={'728300':'seasonal','732320':'seasonal','700804':'seasonal','730015':'intern','727600':'reimb'};
+const ACCT_KIND={'728300':'wages','730015':'wages','732320':'fringe','700804':'fringe','727600':'reimb'};
+function xlDate(v){
+  if(v==null||v==='') return null;
+  if(typeof v==='number') return new Date(Date.UTC(1899,11,30)+Math.round(v)*DAY).toISOString().slice(0,10);
+  if(v instanceof Date) return ISO(Date.UTC(v.getFullYear(),v.getMonth(),v.getDate()));
+  const m=String(v).match(/(\d{4})-(\d{2})-(\d{2})/)||String(v).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!m) return null;
+  return m[1].length===4?`${m[1]}-${m[2]}-${m[3]}`:`${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`;
+}
+const personKey=name=>{const [last,first]=String(name||'').split(',');return (last||'').toLowerCase().replace(/[^a-z]/g,'')+'|'+((first||'').trim()[0]||'').toLowerCase();};
+function parseTransactions(buf){
+  const wb=XLSX.read(buf,{type:'array'});
+  let rows=null;
+  for(const n of wb.SheetNames){ const r=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null}); if(r.some(x=>x&&x[0]==='Transaction Type')){rows=r;break;} }
+  if(!rows) throw new Error('This doesn’t look like a Transaction Detail YTD export (no “Transaction Type” header row).');
+  const hi=rows.findIndex(x=>x&&x[0]==='Transaction Type'), H=rows[hi];
+  const c=n=>H.indexOf(n);
+  const need=['Account','Account Desc','Journal Date','Employee ID','Employee Name','Hours Worked','Pay End Date','Amount'];
+  const miss=need.filter(n=>c(n)<0); if(miss.length) throw new Error('Missing columns: '+miss.join(', '));
+  const top=rows.slice(0,hi).map(r=>(r||[]).filter(x=>x!=null).join(' ')).join('\n');
+  const fund=(top.match(/Fund:\s*(\d+)/)||[])[1]||'';
+  const run=(top.match(/Time Run:\s*([^\n]+)/)||[])[1]||'';
+  const A={importedAt:new Date().toISOString(), run:run.trim(), fund, total:0, lastPayEnd:null, byAccount:{}, byMonth:{}, people:{}};
+  for(const r of rows.slice(hi+1)){
+    if(!r||r[0]==null||/total/i.test(String(r[0]))) continue;
+    const amt=+r[c('Amount')]; if(!isFinite(amt)) continue;
+    const acct=String(r[c('Account')]||'').trim(), desc=r[c('Account Desc')]||'';
+    A.total+=amt;
+    (A.byAccount[acct]=A.byAccount[acct]||{desc,amount:0}).amount+=amt;
+    const jd=xlDate(r[c('Journal Date')]); if(jd){const mk=jd.slice(0,7); A.byMonth[mk]=(A.byMonth[mk]||0)+amt;}
+    const name=r[c('Employee Name')]; if(!name) continue;
+    const id=String(r[c('Employee ID')]||'').trim(), key=id||personKey(name);
+    const p=A.people[key]=A.people[key]||{empId:id,name,key:personKey(name),wages:0,fringe:0,reimb:0,other:0,periods:{}};
+    const kind=ACCT_KIND[acct]||'other'; p[kind]+=amt;
+    const pe=xlDate(r[c('Pay End Date')]);
+    if(pe){
+      if(!A.lastPayEnd||pe>A.lastPayEnd) A.lastPayEnd=pe;
+      if(kind==='wages'){ const q=p.periods[pe]=p.periods[pe]||{hours:0,wages:0}; q.hours+=+r[c('Hours Worked')]||0; q.wages+=amt; }
+    }
+  }
+  const r2=n=>Math.round(n*100)/100;
+  A.total=r2(A.total); for(const k in A.byAccount) A.byAccount[k].amount=r2(A.byAccount[k].amount); for(const k in A.byMonth) A.byMonth[k]=r2(A.byMonth[k]);
+  for(const p of Object.values(A.people)){ ['wages','fringe','reimb','other'].forEach(k=>p[k]=r2(p[k])); for(const q of Object.values(p.periods)){q.hours=r2(q.hours);q.wages=r2(q.wages);} }
+  return A;
+}
+function matchActual(e){
+  const A=S.actuals; if(!A) return null;
+  if(e.empId&&A.people[e.empId]) return A.people[e.empId];
+  const k=personKey(e.name); return Object.values(A.people).find(p=>p.key===k)||null;
+}
+function schedHours(e,a,b){ // scheduled hours in [a,b] at the current schedule
+  let h=0;
+  for(let t=P(a);t<=P(b);t+=DAY){ const s=ISO(t); if(e.start&&s<e.start) continue; if(e.end&&s>e.end) continue; if(!workDay(s,e.type)) continue; h+=+e.cur[new Date(t).getUTCDay()-1]||0; }
+  return h;
+}
+function actualsReview(){
+  const A=S.actuals; if(!A) return null;
+  const pe=A.lastPayEnd, ps=addDays(pe,-13);
+  const rows=S.employees.map(e=>{ const a=matchActual(e), last=a&&a.periods[pe]; const sch=schedHours(e,ps,pe);
+    return {e,a,paid:a?a.wages+a.fringe:0,lastHrs:last?last.hours:0,sched:sch,rate:last&&last.hours?last.wages/last.hours:null}; });
+  const matched=new Set(rows.filter(r=>r.a).map(r=>r.a));
+  const reimbNames=S.settings.otherEncumbrances.map(o=>o.label.toLowerCase());
+  const unplanned=Object.values(A.people).filter(p=>!matched.has(p)&&(p.wages||p.fringe)&&!(p.reimb&&!p.wages));
+  const groupPaid={seasonal:0,intern:0,reimb:0,other:0};
+  for(const [acct,v] of Object.entries(A.byAccount)) groupPaid[ACCT_GROUP[acct]||'other']+=v.amount;
+  for(const k in groupPaid) groupPaid[k]=Math.round(groupPaid[k]*100)/100;
+  return {pe,ps,rows,unplanned,groupPaid};
+}
+async function importTransactions(file){
+  if(!window.XLSX) throw new Error('The spreadsheet reader didn’t load. Check your connection and try again.');
+  const A=parseTransactions(await file.arrayBuffer());
+  if(A.fund&&A.fund!=='52110') throw new Error('This export is for fund '+A.fund+', not 52110.');
+  S.actuals=A;
+  const msgs=[];
+  if(Math.abs(S.settings.ytdExpended-A.total)>=0.01){ msgs.push('FYTD expended '+money(S.settings.ytdExpended)+' → '+money(A.total)); S.settings.ytdExpended=A.total; }
+  if(A.lastPayEnd&&A.lastPayEnd!==S.settings.paidThrough){ msgs.push('paid through '+fmtD(S.settings.paidThrough)+' → '+fmtD(A.lastPayEnd)); S.settings.paidThrough=A.lastPayEnd; }
+  commit();
+  return msgs;
+}
+
+function renderAct(){
+  const R=actualsReview(), A=S.actuals;
+  const importer=`<div class="toolbar"><button class="btn primary" data-act="txn-import">${A?'Import a newer Transaction Detail':'Import Transaction Detail YTD (.xlsx)'}</button><input type="file" id="txnfile" accept=".xlsx,.xls" hidden><span class="meta" id="txnmsg"></span></div>`;
+  if(!R){ $('#tab-act').innerHTML=`<h3>Actual pay to date</h3><p class="help">Import the “Year to Date Transaction Detail – Expense Transactions” export for fund 52110. The planner will set FYTD expended and the paid-through date from it, compare each person's hours in the last pay period with their schedule, and flag anyone paid from 52110 who isn't in the plan.</p>${importer}`; return; }
+  const st=S.settings, tot=sum(Object.values(A.byAccount).map(v=>v.amount));
+  const flag=r=>{ if(r.e.include===false) return '<span class="pill plain">Not counted</span>';
+    if(!r.a) return r.sched>0?'<span class="pill warn">No pay yet</span>':'';
+    const d=r.lastHrs-r.sched; if(r.sched===0&&r.lastHrs===0) return '';
+    return Math.abs(d)<0.5?'<span class="pill good">On schedule</span>':(d>0?`<span class="pill warn">+${hrs(d)} hrs</span>`:`<span class="pill bad">${hrs(d)} hrs</span>`); };
+  const body=['seasonal','intern'].map(g=>`<tr class="group"><td colspan="7">${g==='seasonal'?'Contracted Seasonal Employees':'Contracted Student Interns'}</td></tr>`+
+    R.rows.filter(r=>r.e.type===g).map(r=>`<tr class="${r.e.include===false?'excluded':''}"><td class="name">${esc(r.e.name)}</td><td class="r num">${money(r.paid)}</td><td class="r num">${hrs(r.lastHrs)}</td><td class="r num">${hrs(r.sched)}</td><td class="r num">${r.rate?'$'+r.rate.toFixed(2):'—'}</td><td class="r num">${r.rate&&Math.abs(r.rate-r.e.rate)>0.01?'<span class="pill warn">plan $'+r.e.rate.toFixed(2)+'</span>':''}</td><td class="r">${flag(r)}</td></tr>`).join('')).join('');
+  const months=Object.keys(A.byMonth).sort();
+  $('#tab-act').innerHTML=`<h3>Actual pay to date</h3>
+   <p class="help">From the Transaction Detail run ${esc(A.run||fmtD(A.importedAt.slice(0,10)))}, through the pay period ending ${fmtD(R.pe)}. Total ${money(A.total)}${Math.abs(A.total-st.ytdExpended)<0.01?' — matches FYTD expended':' — <b style="color:var(--warn)">differs from FYTD expended '+money(st.ytdExpended)+'</b>'}.</p>
+   ${R.unplanned.length?`<div class="callout"><b>Paid from 52110 but not in the plan:</b> ${R.unplanned.map(p=>`${esc(p.name)} (${money(p.wages+p.fringe)}, last paid period ending ${fmtD(Object.keys(p.periods).sort().pop()||'')})`).join('; ')}. Add them as a hire if they'll keep working, or check whether the charge belongs on another fund.</div>`:''}
+   <div class="grid2">
+    <div class="ledger"><h2>By account</h2>${Object.entries(A.byAccount).sort().map(([k,v])=>`<div class="row"><span>${k} ${esc(v.desc)}</span><span class="num">${money(v.amount)}</span></div>`).join('')}<div class="row total"><span>Total</span><span class="num">${money(tot)}</span></div></div>
+    <div class="ledger"><h2>By month posted</h2>${months.map(m=>`<div class="row"><span>${new Date(m+'-15').toLocaleDateString('en-US',{month:'long',year:'numeric'})}</span><span class="num">${money(A.byMonth[m])}</span></div>`).join('')}<div class="row total"><span>Total</span><span class="num">${money(A.total)}</span></div></div>
+   </div>
+   <h3 style="margin-top:18px">Last pay period: ${fmtD(R.ps)} – ${fmtD(R.pe)}</h3>
+   <p class="help">Hours paid compared with what the current schedule would give for those two weeks, after holidays. Use this to check that the schedule in the plan is realistic.</p>
+   <div class="scroll"><table><thead><tr><th>Employee</th><th class="r">Paid YTD (incl. fringe)</th><th class="r">Hours paid</th><th class="r">Hours scheduled</th><th class="r">Rate paid</th><th></th><th class="r">Check</th></tr></thead><tbody>${body}</tbody></table></div>
+   ${importer}`;
+}
+
 /* ---------- feed for the FY Budget Tracker (Payroll tab) ----------
    Group totals only, no names. Ambassadors line = seasonal, Student Parking Enforcers line = intern. */
 const SUMMARY_KEY='ucaps_payroll_summary_fy27';
@@ -579,8 +693,9 @@ function buildSummary(){
       encumbered:+sum(r.map(x=>x.p.encTotal)).toFixed(2), projected:+sum(r.map(x=>x.p.cost)).toFixed(2),
       release:+sum(r.map(x=>Math.max(x.p.diff,0))).toFixed(2), add:+sum(r.map(x=>Math.max(-x.p.diff,0))).toFixed(2),
       unencumbered:r.filter(x=>x.p.encTotal===0).length}; };
+  const R=actualsReview();
   const u=(typeof ucapsUser==='function'&&ucapsUser())||{};
-  return {version:1, savedAt:new Date().toISOString(), savedBy:u.email||'', paidThrough:st.paidThrough, effectiveDate:st.effectiveDate, fyEnd:st.fyEnd,
+  return {version:1, paid:R?R.groupPaid:null, postings:S.actuals?S.actuals.byMonth:null, lastPayEnd:S.actuals?S.actuals.lastPayEnd:null, savedAt:new Date().toISOString(), savedBy:u.email||'', paidThrough:st.paidThrough, effectiveDate:st.effectiveDate, fyEnd:st.fyEnd,
     baseBudget:st.baseBudget, ytdExpended:st.ytdExpended, encReport:+T.encReport.toFixed(2), other:T.other,
     projected:+T.projected.toFixed(2), balEnc:+T.balEnc.toFixed(2), balProj:+T.balProj.toFixed(2), runOut:neg?neg.b:null,
     groups:{seasonal:grp('seasonal'), intern:grp('intern'),
@@ -595,6 +710,12 @@ async function writeSummary(sb){
 /* ---------- export / import ---------- */
 function saveFile(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
 function exportPlan(){ saveFile('UCAPS_Payroll_Plan_'+ISO(Date.now())+'.json', new Blob([JSON.stringify(S,null,2)],{type:'application/json'})); }
+document.addEventListener('change',async ev=>{
+  if(ev.target.id!=='txnfile') return;
+  const f=ev.target.files[0]; ev.target.value=''; if(!f||!S) return;
+  try{ const msgs=await importTransactions(f); const m=$('#txnmsg'); if(m) m.textContent='Imported '+f.name+(msgs.length?' · updated '+msgs.join(', '):''); }
+  catch(err){ const m=$('#txnmsg'); if(m) m.textContent='Import failed: '+err.message; }
+});
 $('#importfile').addEventListener('change',async ev=>{
   const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
   try{
@@ -691,6 +812,22 @@ function supervisorPDF(){
     y=heading('Notes',y);
     doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(...INK);
     const lines=doc.splitTextToSize(st.reportNotes.trim(),W-2*M); doc.text(lines,M,y+8); y+=lines.length*12+24;
+  }
+
+  // actual pay
+  const R=actualsReview();
+  if(R){
+    y=heading('Actual pay — last pay period '+fmtD(R.ps)+' to '+fmtD(R.pe),y);
+    doc.autoTable({...base,startY:y,head:[['Employee','Paid YTD (incl. fringe)','Hours paid','Hours scheduled','Difference']],
+      body:R.rows.filter(r=>r.e.include!==false).map(r=>[r.e.name,m(r.paid),hrs(r.lastHrs),hrs(r.sched),(r.lastHrs-r.sched>0?'+':'')+hrs(r.lastHrs-r.sched)]),
+      columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},
+      didParseCell:d=>{ if(d.section==='body'&&d.column.index===4){ const v=parseFloat(d.cell.raw); if(v<=-0.5) d.cell.styles.textColor=RED; } }});
+    y=after();
+    if(R.unplanned.length){
+      doc.setFont('helvetica','normal');doc.setFontSize(9);doc.setTextColor(...RED);
+      const ls=doc.splitTextToSize('Paid from 52110 but not in the plan: '+R.unplanned.map(p=>p.name+' ('+m(p.wages+p.fringe)+')').join('; '),W-2*M);
+      doc.text(ls,M,y-8); y+=ls.length*11+6;
+    }
   }
 
   // pay periods
