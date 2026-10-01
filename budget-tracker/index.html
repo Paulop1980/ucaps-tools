@@ -1523,8 +1523,8 @@ function payWorksheetHtml(it){
    the planner's projected cost to 6/30 beyond what's encumbered.
    ============================================================ */
 var PLANNER_SUMMARY_KEY = "ucaps_payroll_summary_fy27";
-var PLANNER_GROUP = { ambassadors:"seasonal", enforcers:"intern" };
-var PLANNER_GROUP_LABEL = { seasonal:"Contracted Seasonal Employees", intern:"Contracted Student Interns" };
+var PLANNER_GROUP = { ambassadors:"seasonal", enforcers:"intern", "cell-reimb":"reimb" };
+var PLANNER_GROUP_LABEL = { seasonal:"Contracted Seasonal Employees", intern:"Contracted Student Interns", reimb:"Employee Reimbursement 727600" };
 var plannerSummary = null;
 function loadPlannerSummary(){
   if(!(window.db && window.db.get)) return Promise.resolve(null);
@@ -1573,6 +1573,9 @@ function plannerPanelHtml(){
 }
 function plannerLineHtml(it){
   var g = plannerGroup(it);
+  if(g && it.plannerLink==="reimb"){
+    return '<div class="planner-line">Linked to the Payroll Planner ('+PLANNER_GROUP_LABEL.reimb+'): encumbered on fund 52110 <b>'+money(g.encumbered)+'</b>, counted as a fixed cost through 6/30.</div>';
+  }
   if(g){
     var diff = round2(g.encumbered - g.projected);
     return '<div class="planner-line">Linked to the Payroll Planner ('+PLANNER_GROUP_LABEL[it.plannerLink]+'): '+
