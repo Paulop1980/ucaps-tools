@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS Contract Payroll Planner</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="../ucaps_shared.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: ledger-style tool — budget strip on top, tabbed work area below, every figure in tabular mono */
+:root{
+  --bg:#f5f6f3; --panel:#ffffff; --ink:#1d2622; --muted:#5e6a64; --line:#d9ded8; --line-soft:#e9ece7;
+  --accent:#1f5f4a; --accent-soft:#e3efe9; --accent-ink:#ffffff;
+  --good:#1f7a4a; --good-bg:#e2f3e8; --warn:#9a6200; --warn-bg:#fbefd5; --bad:#b3261e; --bad-bg:#fbe4e1;
+  --input:#fbfcfa;
+  --f-display:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-num:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121715; --panel:#1a211e; --ink:#e4ebe7; --muted:#9aa9a2; --line:#2e3833; --line-soft:#242c28;
+  --accent:#6cc3a0; --accent-soft:#1f3a30; --accent-ink:#0e1a15;
+  --good:#6fd39a; --good-bg:#183a27; --warn:#f0b75a; --warn-bg:#3a2d12; --bad:#ff8a80; --bad-bg:#3d1c1a;
+  --input:#151b18; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121715; --panel:#1a211e; --ink:#e4ebe7; --muted:#9aa9a2; --line:#2e3833; --line-soft:#242c28;
+  --accent:#6cc3a0; --accent-soft:#1f3a30; --accent-ink:#0e1a15;
+  --good:#6fd39a; --good-bg:#183a27; --warn:#f0b75a; --warn-bg:#3a2d12; --bad:#ff8a80; --bad-bg:#3d1c1a;
+  --input:#151b18; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1280px;margin:0 auto;padding-inline:20px;padding-block:22px 60px}
+header.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:18px}
+h1{font-family:var(--f-display);font-size:1.75rem;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:.9rem}
+.sub code{font-family:var(--f-num);font-size:.82rem}
+.savestate{font-size:.8rem;color:var(--muted)}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+/* summary */
+.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin-bottom:14px}
+.ledger{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.ledger h2{font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 8px;font-weight:600}
+.ledger .row{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:.92rem}
+.ledger .row.total{border-top:1px solid var(--line);margin-top:6px;padding-top:7px;font-weight:600}
+.ledger .big{font-family:var(--f-num);font-size:1.45rem;font-weight:600}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.bad{background:var(--bad-bg);color:var(--bad)} .pill.warn{background:var(--warn-bg);color:var(--warn)} .pill.plain{background:var(--accent-soft);color:var(--accent)}
+.callout{background:var(--warn-bg);color:var(--ink);border-left:3px solid var(--warn);padding:10px 14px;border-radius:4px;margin-bottom:14px;font-size:.9rem}
+.callout b{color:var(--warn)}
+/* tabs */
+nav.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:14px;overflow-x:auto}
+nav.tabs button{font:inherit;font-weight:600;background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:9px 14px;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+nav.tabs button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.panel h3{font-family:var(--f-display);font-size:1.15rem;margin:0 0 4px}
+.panel p.help{color:var(--muted);margin:0 0 12px;font-size:.88rem;max-width:80ch}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:bottom}
+td{padding:7px 8px;border-bottom:1px solid var(--line-soft);vertical-align:middle}
+td.r,th.r{text-align:right}
+tr.group td{background:var(--accent-soft);color:var(--accent);font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}
+tr.sub td{font-weight:600;border-bottom:1px solid var(--line)}
+tr.excluded td{opacity:.5}
+tr.detail td{background:var(--bg);padding:12px 14px}
+.name{font-weight:600}
+.meta{color:var(--muted);font-size:.78rem}
+input,select{font:inherit;color:var(--ink);background:var(--input);border:1px solid var(--line);border-radius:5px;padding:4px 6px}
+input[type=number]{font-family:var(--f-num);text-align:right}
+input.rate{width:78px} input.hr{width:54px} input.money{width:120px} input.wide{width:100%}
+input.unconfirmed{border-color:var(--warn);background:var(--warn-bg)}
+button.btn{font:inherit;font-weight:600;font-size:.85rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer}
+button.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button.btn.small{padding:3px 9px;font-size:.78rem}
+button.btn.danger{color:var(--bad)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:12px 0}
+.daygrid{display:grid;grid-template-columns:auto repeat(5,auto) auto;gap:6px 8px;align-items:center;justify-content:start}
+.daygrid .lbl{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.detailwrap{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+.field{display:flex;flex-direction:column;gap:3px;font-size:.8rem;color:var(--muted)}
+.field input,.field select{color:var(--ink);font-size:.9rem}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.formgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+.bar{height:8px;background:var(--line-soft);border-radius:4px;overflow:hidden;min-width:80px}
+.bar span{display:block;height:100%;background:var(--accent)}
+.bar span.over{background:var(--bad)}
+.answer{font-family:var(--f-num);font-size:1.6rem;font-weight:600;color:var(--accent)}
+textarea{font-family:var(--f-num);font-size:.82rem;width:100%;min-height:220px;background:var(--input);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px}
+.chip{display:inline-block;font-size:.72rem;padding:1px 7px;border-radius:4px;background:var(--line-soft);color:var(--muted);margin-left:4px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);margin-top:10px}
+@media (max-width:640px){.wrap{padding-inline:16px} h1{font-size:1.4rem}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.back{font-size:.85rem;color:var(--accent);text-decoration:none;font-weight:600}
+.back:hover{text-decoration:underline}
+.hdr-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+.empty h3{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <a class="back" href="../index.html">← UCAPS Tools</a>
+  <header class="top">
+    <div>
+      <h1>UCAPS Contract Payroll Planner</h1>
+      <div class="sub">Fund <code>52110</code> Gen Ops Contract Payroll · DeptID <code>L300801000</code> · FY27 (through 6/30/2027)</div>
+    </div>
+    <div class="hdr-actions">
+      <span class="savestate" id="savestate">Signing in…</span>
+      <button class="btn primary" data-act="pdf" id="btn-pdf">Supervisor report (PDF)</button>
+      <button class="btn" data-act="export">Export plan</button>
+      <button class="btn" data-act="import">Import plan</button>
+      <input type="file" id="importfile" accept=".json,application/json" hidden>
+    </div>
+  </header>
+
+  <section class="summary" id="summary"></section>
+  <div id="alerts"></div>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="emp" aria-selected="true">Employees &amp; encumbrances</button>
+    <button role="tab" data-tab="pp" aria-selected="false">Pay periods</button>
+    <button role="tab" data-tab="cap" aria-selected="false">Room to hire / adjust</button>
+    <button role="tab" data-tab="set" aria-selected="false">Budget &amp; calendar</button>
+  </nav>
+
+  <section id="tab-emp" class="panel"></section>
+  <section id="tab-pp" class="panel" hidden></section>
+  <section id="tab-cap" class="panel" hidden></section>
+  <section id="tab-set" class="panel" hidden></section>
+</div>
+
+<script>
+/* ---------- baseline from the 10/1/2026 encumbrance report + 10/4–10/10 schedule ---------- */
+const DAYS=['Mon','Tue','Wed','Thu','Fri'];
+const BASELINE = {
+  version: 4,
+  settings: {
+    baseBudget: 77500, ytdExpended: 12944.08, paidThrough: '2026-09-18', fyEnd: '2027-06-30',
+    effectiveDate: '2026-10-03', seasonalFringePct: 2.21, internsWorkSpringBreak: false,
+    fallStart: '2026-09-01', fallEnd: '2026-12-10', springStart: '2027-01-19', springEnd: '2027-04-29',
+    springBreakStart: '2027-03-08', springBreakEnd: '2027-03-12',
+    thanksgivingStart: '2026-11-25', thanksgivingEnd: '2026-11-27',
+    winterBlackoutStart: '2026-12-24', winterBlackoutEnd: '2027-01-01',
+    otherEncumbrances: [],
+    holidays: [
+      ['2026-10-12','Indigenous Peoples’ Day'],['2026-11-11','Veterans Day'],['2026-11-26','Thanksgiving'],
+      ['2026-11-27','Day after Thanksgiving'],['2026-12-25','Christmas Day'],['2027-01-01','New Year’s Day'],
+      ['2027-01-18','MLK Day'],['2027-02-15','Presidents’ Day'],['2027-04-19','Patriots’ Day'],
+      ['2027-05-31','Memorial Day'],['2027-06-18','Juneteenth (observed)']
+    ]
+  },
+  employees: []   // loaded from the UCAPS store after sign-in — never commit names or IDs to this public repo
+};
+
+/* ---------- state ---------- */
+const clone=o=>JSON.parse(JSON.stringify(o));
+let S = null;   // the saved plan, loaded after sign-in
+let openRow = null;
+let activeTab = 'emp';
+let capForm = {type:'intern', rate:15, start:'2026-10-03', end:'2027-04-29', hrs:10};
+
+/* ---------- date helpers (UTC, ISO strings) ---------- */
+const P=s=>{const [y,m,d]=s.split('-').map(Number);return Date.UTC(y,m-1,d)};
+const ISO=t=>new Date(t).toISOString().slice(0,10);
+const DAY=86400000;
+const addDays=(s,n)=>ISO(P(s)+n*DAY);
+const fmtD=s=>{if(!s)return '';const d=new Date(P(s));return (d.getUTCMonth()+1)+'/'+d.getUTCDate()+'/'+String(d.getUTCFullYear()).slice(2)};
+const between=(s,a,b)=>s>=a&&s<=b;
+const money=n=>(n<0?'−':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+const money0=n=>(n<0?'−':'')+'$'+Math.abs(Math.round(n)).toLocaleString('en-US');
+const hrs=n=>(Math.round(n*100)/100).toLocaleString('en-US',{maximumFractionDigits:2});
+const sum=a=>a.reduce((x,y)=>x+(+y||0),0);
+
+/* Is this date a paid working day for this type of employee? */
+function workDay(s, type){
+  const st=S.settings, wd=new Date(P(s)).getUTCDay();
+  if(wd===0||wd===6) return false;
+  if(st.holidays.some(h=>h[0]===s)) return false;
+  if(between(s,st.thanksgivingStart,st.thanksgivingEnd)) return false;
+  if(type==='seasonal' && between(s,st.winterBlackoutStart,st.winterBlackoutEnd)) return false;
+  if(type==='intern'){
+    const inFall=between(s,st.fallStart,st.fallEnd), inSpring=between(s,st.springStart,st.springEnd);
+    if(!inFall&&!inSpring) return false;
+    if(inSpring && !st.internsWorkSpringBreak && between(s,st.springBreakStart,st.springBreakEnd)) return false;
+  }
+  return true;
+}
+const fringe=type=>type==='seasonal'?S.settings.seasonalFringePct/100:0;
+
+/* Day-by-day projection for one employee from the day after paid-through to their end date */
+function project(e){
+  const st=S.settings;
+  let start=addDays(st.paidThrough,1);
+  if(e.start && e.start>start) start=e.start;
+  const end=(e.end && e.end<st.fyEnd)?e.end:st.fyEnd;
+  const out={hoursBefore:0,hoursAfter:0,daysAfter:[0,0,0,0,0],byDate:{}};
+  for(let t=P(start);t<=P(end);t+=DAY){
+    const s=ISO(t);
+    if(!workDay(s,e.type)) continue;
+    const di=new Date(t).getUTCDay()-1;
+    const after=s>=st.effectiveDate;
+    const sched=(after&&e.prop)?e.prop:e.cur;
+    const h=+sched[di]||0;
+    if(after){out.hoursAfter+=h;out.daysAfter[di]++;}else out.hoursBefore+=h;
+    if(h) out.byDate[s]=h;
+  }
+  const loaded=e.rate*(1+fringe(e.type));
+  out.hours=out.hoursBefore+out.hoursAfter;
+  out.cost=out.hours*loaded;
+  out.costBefore=out.hoursBefore*loaded;
+  out.encTotal=(+e.enc||0)+(+e.fringeEnc||0);
+  out.diff=out.encTotal-out.cost;
+  // weekly hours the encumbrance supports from the effective date on (spread like their schedule)
+  const sched=e.prop||e.cur, wk=sum(sched);
+  const perWeekHourCost = wk>0 ? sum(sched.map((h,i)=>h/wk*out.daysAfter[i]))*loaded : 0;
+  out.supportedWk = (out.encTotal>0 && perWeekHourCost>0) ? Math.max(0,(out.encTotal-out.costBefore)/perWeekHourCost) : null;
+  out.weeksAfter = sum(out.daysAfter)/5;
+  return out;
+}
+
+function totals(){
+  const st=S.settings;
+  const rows=S.employees.map(e=>({e,p:project(e)}));
+  const inc=rows.filter(r=>r.e.include!==false);
+  const other=sum(st.otherEncumbrances.map(o=>o.amount));
+  const encReport=sum(S.employees.filter(e=>!e.isNew).map(e=>(+e.enc||0)+(+e.fringeEnc||0)))+other;
+  const encIncluded=sum(inc.map(r=>r.p.encTotal))+other;
+  const projected=sum(inc.map(r=>r.p.cost))+other;
+  return {rows,inc,other,encReport,encIncluded,projected,
+    available:st.baseBudget-st.ytdExpended,
+    balEnc:st.baseBudget-st.ytdExpended-encReport,
+    balProj:st.baseBudget-st.ytdExpended-projected};
+}
+
+/* ---------- rendering ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const cls=n=>n<-0.005?'neg':'pos';
+
+function renderSummary(T){
+  const st=S.settings;
+  const unconf=S.employees.filter(e=>e.include!==false&&!e.rateOk).length;
+  $('#summary').innerHTML=`
+   <div class="ledger"><h2>Per the encumbrance report</h2>
+     <div class="row"><span>Base budget</span><span class="num">${money(st.baseBudget)}</span></div>
+     <div class="row"><span>FYTD expended</span><span class="num">−${money(st.ytdExpended)}</span></div>
+     <div class="row"><span>Encumbered</span><span class="num">−${money(T.encReport)}</span></div>
+     <div class="row total"><span>Balance</span><span class="num ${cls(T.balEnc)}">${money(T.balEnc)}</span></div></div>
+   <div class="ledger"><h2>Per the schedule (projected)</h2>
+     <div class="row"><span>Available after FYTD</span><span class="num">${money(T.available)}</span></div>
+     <div class="row"><span>Projected cost to 6/30</span><span class="num">−${money(T.projected)}</span></div>
+     <div class="row"><span>Encumbrance vs. projection</span><span class="num ${cls(T.encIncluded-T.projected)}">${money(T.encIncluded-T.projected)}</span></div>
+     <div class="row total"><span>Projected year-end</span><span class="num ${cls(T.balProj)}">${money(T.balProj)}</span></div></div>
+   <div class="ledger"><h2>Where you stand</h2>
+     <div class="big ${cls(T.balProj)}">${money(T.balProj)}</div>
+     <div style="margin:6px 0 8px">${T.balProj<0?`<span class="pill bad">Over budget — cut ${money0(-T.balProj)}</span>`:`<span class="pill good">Room for ${money0(T.balProj)} more</span>`}</div>
+     <div class="meta">Paid through ${fmtD(st.paidThrough)} · changes start ${fmtD(st.effectiveDate)}${unconf?` · <span style="color:var(--warn)">${unconf} pay rate${unconf>1?'s':''} not confirmed</span>`:''}</div></div>`;
+  const al=[];
+  if(unconf) al.push(`<div class="callout"><b>Pay rates are placeholders.</b> Every projection uses the rate in the Rate column. They start at $15.00/hr. Enter each person's real hourly rate and tick “confirmed” so the projections can be trusted.</div>`);
+  $('#alerts').innerHTML=al.join('');
+}
+
+function empRow(r){
+  const {e,p}=r, inc=e.include!==false;
+  const curWk=sum(e.cur), propWk=e.prop?sum(e.prop):curWk;
+  const diffPill = p.encTotal===0 && inc ? `<span class="pill warn">No encumbrance</span>`
+     : Math.abs(p.diff)<1 ? `<span class="pill good">Matches</span>`
+     : p.diff>0 ? `<span class="pill good">+${money0(p.diff)} spare</span>` : `<span class="pill bad">${money0(p.diff)} short</span>`;
+  return `<tr class="${inc?'':'excluded'}" data-id="${e.id}">
+    <td><div class="name">${esc(e.name)}${e.isNew?'<span class="chip">new</span>':''}</div>
+        <div class="meta">${e.empId?('ID '+esc(e.empId)+' · '):''}ends ${fmtD(e.end)}${e.start?' · starts '+fmtD(e.start):''}${e.note?' · '+esc(e.note):''}</div></td>
+    <td><div style="display:flex;gap:6px;align-items:center">$<input type="number" step="0.01" min="0" class="rate ${e.rateOk?'':'unconfirmed'}" id="rate-${e.id}" data-f="rate" value="${e.rate}" aria-label="Hourly rate for ${esc(e.name)}"></div>
+        <label class="meta"><input type="checkbox" id="ok-${e.id}" data-f="rateOk" ${e.rateOk?'checked':''}> confirmed</label></td>
+    <td class="r num">${hrs(curWk)}</td>
+    <td class="r num">${e.prop?`<b>${hrs(propWk)}</b>`:'—'}</td>
+    <td class="r num">${hrs(p.hours)}</td>
+    <td class="r num">${money(p.cost)}</td>
+    <td class="r num">${money(p.encTotal)}${e.fringeEnc?`<div class="meta">incl. ${money(e.fringeEnc)} pension/ins.</div>`:''}</td>
+    <td class="r">${inc?diffPill:'<span class="pill plain">Not counted</span>'}</td>
+    <td class="r num">${p.supportedWk==null?'—':hrs(p.supportedWk)}</td>
+    <td class="r"><button class="btn small" data-act="toggle">${openRow===e.id?'Close':'Edit hours'}</button></td>
+  </tr>${openRow===e.id?detailRow(e,p):''}`;
+}
+
+function detailRow(e,p){
+  const inp=(arr,key)=>arr.map((h,i)=>`<input type="number" class="hr" step="0.25" min="0" id="${key}-${e.id}-${i}" data-sched="${key}" data-i="${i}" value="${h}" aria-label="${key} ${DAYS[i]}">`).join('');
+  const prop=e.prop||e.cur;
+  return `<tr class="detail"><td colspan="10"><div class="detailwrap">
+    <div class="daygrid">
+      <span></span>${DAYS.map(d=>`<span class="lbl">${d}</span>`).join('')}<span class="lbl">Week</span>
+      <span class="lbl">Current</span>${inp(e.cur,'cur')}<span class="num">${hrs(sum(e.cur))}</span>
+      <span class="lbl">From ${fmtD(S.settings.effectiveDate)}</span>${inp(prop,'prop')}<span class="num">${hrs(sum(prop))}</span>
+    </div>
+    <div class="formgrid" style="flex:1;min-width:260px">
+      ${e.isNew?`<label class="field">Name<input id="nm-${e.id}" data-f="name" value="${esc(e.name)}"></label>
+      <label class="field">Type<select id="ty-${e.id}" data-f="type"><option value="intern" ${e.type==='intern'?'selected':''}>Contracted Student Intern</option><option value="seasonal" ${e.type==='seasonal'?'selected':''}>Contracted Seasonal</option></select></label>
+      <label class="field">Start date<input type="date" id="sd-${e.id}" data-f="start" value="${e.start||''}"></label>`:''}
+      <label class="field">Contract end<input type="date" id="ed-${e.id}" data-f="end" value="${e.end}"></label>
+      <label class="field">Encumbered ($)<input type="number" step="0.01" class="money" id="en-${e.id}" data-f="enc" value="${e.enc}"></label>
+      <label class="field">Count in budget<select id="in-${e.id}" data-f="include"><option value="1" ${e.include!==false?'selected':''}>Yes</option><option value="0" ${e.include===false?'selected':''}>No</option></select></label>
+    </div>
+    <div class="meta" style="max-width:300px">
+      Through ${fmtD(addDays(S.settings.effectiveDate,-1))}: ${hrs(p.hoursBefore)} hrs at the current schedule (${money(p.costBefore)}).<br>
+      From ${fmtD(S.settings.effectiveDate)}: ${hrs(p.hoursAfter)} hrs over ${hrs(p.weeksAfter)} working weeks.<br>
+      To spend exactly the encumbrance they'd work <b>${p.supportedWk==null?'—':hrs(p.supportedWk)} hrs/wk</b> from ${fmtD(S.settings.effectiveDate)}.<br>
+      Suggested encumbrance: <b>${money(p.cost)}</b> (${p.diff>=0?'reduce by ':'increase by '}${money(Math.abs(p.diff))})
+      <div class="toolbar">
+        ${e.prop?`<button class="btn small" data-act="clearprop">Undo hour change</button>`:''}
+        ${p.supportedWk!=null?`<button class="btn small" data-act="fit">Fit hours to encumbrance</button>`:''}
+        ${e.isNew?`<button class="btn small danger" data-act="remove">Remove</button>`:''}
+      </div>
+    </div></div></td></tr>`;
+}
+
+function renderEmp(T){
+  const groups=[['seasonal','Contracted Seasonal Employees · 728300 (+ pension/ins. 700804)'],['intern','Contracted Student Interns-CC5 · 730015']];
+  let body='';
+  for(const [g,label] of groups){
+    const rs=T.rows.filter(r=>r.e.type===g);
+    const inc=rs.filter(r=>r.e.include!==false);
+    body+=`<tr class="group"><td colspan="10">${label}</td></tr>`+rs.map(empRow).join('')+
+      `<tr class="sub"><td>Subtotal (counted)</td><td></td><td class="r num">${hrs(sum(inc.map(r=>sum(r.e.cur))))}</td><td class="r num">${hrs(sum(inc.map(r=>sum(r.e.prop||r.e.cur))))}</td><td class="r num">${hrs(sum(inc.map(r=>r.p.hours)))}</td><td class="r num">${money(sum(inc.map(r=>r.p.cost)))}</td><td class="r num">${money(sum(inc.map(r=>r.p.encTotal)))}</td><td class="r num ${cls(sum(inc.map(r=>r.p.diff)))}">${money(sum(inc.map(r=>r.p.diff)))}</td><td></td><td></td></tr>`;
+  }
+  body+=S.settings.otherEncumbrances.map(o=>`<tr><td colspan="5"><span class="name">${esc(o.label)}</span><div class="meta">Fixed — counted as-is</div></td><td class="r num">${money(o.amount)}</td><td class="r num">${money(o.amount)}</td><td colspan="3"></td></tr>`).join('');
+  $('#tab-emp').innerHTML=`<h3>Employees &amp; encumbrances</h3>
+   <p class="help">Projected cost = remaining scheduled hours × rate, from ${fmtD(addDays(S.settings.paidThrough,1))} to each contract end. Holidays and Thanksgiving recess are skipped for everyone. Seasonal staff skip ${fmtD(S.settings.winterBlackoutStart)}–${fmtD(S.settings.winterBlackoutEnd)}. Interns work only from the first to the last day of classes. Open <b>Edit hours</b> to change someone's weekly hours from ${fmtD(S.settings.effectiveDate)} on.</p>
+   <div class="scroll"><table>
+    <thead><tr><th>Employee</th><th>Rate / hr</th><th class="r">Hrs/wk now</th><th class="r">Hrs/wk new</th><th class="r">Hrs left</th><th class="r">Projected cost</th><th class="r">Encumbered</th><th class="r">Encumbrance check</th><th class="r" title="Weekly hours the current encumbrance pays for, from the change date">Enc. supports hrs/wk</th><th></th></tr></thead>
+    <tbody>${body}</tbody></table></div>
+   <div class="toolbar"><button class="btn primary" data-act="addhire">+ Add a new hire</button><button class="btn" data-act="fitall">Fit everyone's hours to their encumbrance</button><button class="btn danger" data-act="resetconfirm">Reset to the 10/1 report</button><span id="resetzone"></span></div>`;
+}
+
+function periods(T){
+  const st=S.settings, list=[];
+  for(let s=addDays(st.paidThrough,1); s<=st.fyEnd; s=addDays(s,14)) list.push([s, addDays(s,13)<st.fyEnd?addDays(s,13):st.fyEnd]);
+  let run=T.available-T.other;
+  return list.map(([a,b])=>{
+    let sea=0,int=0;
+    for(const {e,p} of T.inc){
+      const lr=e.rate*(1+fringe(e.type));
+      for(const d in p.byDate) if(d>=a&&d<=b){ if(e.type==='seasonal') sea+=p.byDate[d]*lr; else int+=p.byDate[d]*lr; }
+    }
+    run-=sea+int;
+    return {a,b,sea,int,total:sea+int,bal:run};
+  });
+}
+
+function renderPP(T){
+  const ps=periods(T), max=Math.max(...ps.map(p=>p.total),1);
+  const firstNeg=ps.find(p=>p.bal<0);
+  $('#tab-pp').innerHTML=`<h3>Bi-weekly pay periods</h3>
+   <p class="help">Projected payroll for each two-week period after ${fmtD(S.settings.paidThrough)}, with the balance left after it. The starting balance is the base budget minus FYTD expenditure and the $${S.settings.otherEncumbrances.reduce((a,o)=>a+o.amount,0).toLocaleString()} reimbursement. ${firstNeg?`<b style="color:var(--bad)">At this pace the money runs out in the period ending ${fmtD(firstNeg.b)}.</b>`:'<b style="color:var(--good)">At this pace the budget lasts through 6/30.</b>'}</p>
+   <div class="scroll"><table><thead><tr><th>Period</th><th class="r">Seasonal</th><th class="r">Interns</th><th class="r">Period total</th><th style="min-width:110px"></th><th class="r">Balance after</th></tr></thead><tbody>
+   ${ps.map((p,i)=>`<tr><td class="num">${fmtD(p.a)} – ${fmtD(p.b)}${p.a<S.settings.effectiveDate?'<span class="chip">current hours</span>':''}</td><td class="r num">${money(p.sea)}</td><td class="r num">${money(p.int)}</td><td class="r num"><b>${money(p.total)}</b></td><td><div class="bar"><span style="width:${(p.total/max*100).toFixed(1)}%"></span></div></td><td class="r num ${cls(p.bal)}">${money(p.bal)}</td></tr>`).join('')}
+   </tbody></table></div>`;
+}
+
+function capacity(T){
+  const c=capForm, st=S.settings;
+  let start=c.start>addDays(st.paidThrough,1)?c.start:addDays(st.paidThrough,1);
+  let days=0;
+  for(let t=P(start);t<=P(c.end<st.fyEnd?c.end:st.fyEnd);t+=DAY){ if(workDay(ISO(t),c.type)) days++; }
+  const weeks=days/5, loaded=c.rate*(1+fringe(c.type));
+  return {weeks, loaded, perWkHour:weeks*loaded, affordable: T.balProj>0&&weeks>0 ? T.balProj/(weeks*loaded) : 0, costOf: c.hrs*weeks*loaded};
+}
+
+function renderCap(T){
+  const c=capacity(T), st=S.settings;
+  // cutting guidance: hours/week reduction across a group from the effective date
+  const groupWeeks=type=>{const inc=T.inc.filter(r=>r.e.type===type&&r.p.weeksAfter>0);
+    if(!inc.length) return null;
+    const avgRate=sum(inc.map(r=>r.e.rate*(1+fringe(type))))/inc.length;
+    const w=sum(inc.map(r=>r.p.weeksAfter))/inc.length; return {avgRate,w,n:inc.length};};
+  const gs=groupWeeks('seasonal'), gi=groupWeeks('intern');
+  const gap=-T.balProj;
+  const cutTxt=(g,label)=>!g?'':`<div class="row"><span>${label}: cut</span><span class="num">${hrs(gap/(g.avgRate*g.w))} hrs/wk total</span></div>`;
+  $('#tab-cap').innerHTML=`<div class="grid2">
+   <div><h3>Can I afford another person?</h3>
+    <p class="help">Uses the projected year-end balance (${money(T.balProj)}) after every change you've made on the Employees tab.</p>
+    <div class="formgrid">
+      <label class="field">Type<select id="cap-type"><option value="intern" ${c&&capForm.type==='intern'?'selected':''}>Student Intern</option><option value="seasonal" ${capForm.type==='seasonal'?'selected':''}>Seasonal</option></select></label>
+      <label class="field">Rate / hr<input type="number" step="0.01" id="cap-rate" value="${capForm.rate}"></label>
+      <label class="field">Start<input type="date" id="cap-start" value="${capForm.start}"></label>
+      <label class="field">End<input type="date" id="cap-end" value="${capForm.end}"></label>
+      <label class="field">Hours / week<input type="number" step="0.5" id="cap-hrs" value="${capForm.hrs}"></label>
+    </div>
+    <div class="ledger" style="margin-top:14px">
+      <div class="row"><span>Paid working weeks in that window</span><span class="num">${hrs(c.weeks)}</span></div>
+      <div class="row"><span>Cost of ${hrs(capForm.hrs)} hrs/wk</span><span class="num">${money(c.costOf)}</span></div>
+      <div class="row"><span>Balance after this hire</span><span class="num ${cls(T.balProj-c.costOf)}">${money(T.balProj-c.costOf)}</span></div>
+      <div class="row total"><span>Most hours/week you can afford</span><span class="answer">${hrs(Math.floor(c.affordable*4)/4)}</span></div>
+    </div>
+    <div class="toolbar"><button class="btn primary" data-act="caphire">Add this person to the plan</button></div>
+   </div>
+   <div><h3>${gap>0?'How much to cut':'You have room'}</h3>
+    <p class="help">${gap>0?`To close the ${money(gap)} projected gap with cuts starting ${fmtD(st.effectiveDate)}, reduce combined weekly hours by about this much. Pick one group, or split the cut between them.`:`The plan is ${money(T.balProj)} under budget. The Employees tab shows each person's spare or short encumbrance.`}</p>
+    ${gap>0?`<div class="ledger">${cutTxt(gs,'Seasonal only')}${cutTxt(gi,'Interns only')}</div>`:''}
+    <h3 style="margin-top:18px">Encumbrances to adjust</h3>
+    <p class="help">The difference between each person's encumbrance and their projected cost. Releasing the spare and covering the shortfalls brings the encumbrance in line with the plan.</p>
+    <div class="scroll"><table><thead><tr><th>Employee</th><th class="r">Encumbered</th><th class="r">Should be</th><th class="r">Change</th></tr></thead><tbody>
+     ${T.inc.filter(r=>Math.abs(r.p.diff)>=1).map(r=>`<tr><td>${esc(r.e.name)}</td><td class="r num">${money(r.p.encTotal)}</td><td class="r num">${money(r.p.cost)}</td><td class="r num ${r.p.diff>0?'pos':'neg'}">${r.p.diff>0?'−':'+'}${money(Math.abs(r.p.diff))}</td></tr>`).join('')||'<tr><td colspan="4" class="meta">Every encumbrance matches its projection.</td></tr>'}
+    </tbody></table></div>
+   </div></div>`;
+}
+
+function renderSet(){
+  const st=S.settings;
+  const f=(id,label,val,type='date',step)=>`<label class="field">${label}<input type="${type}" ${step?`step="${step}"`:''} id="set-${id}" data-s="${id}" value="${val}"></label>`;
+  $('#tab-set').innerHTML=`<div class="grid2"><div>
+   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out.</p>
+   <div class="formgrid">${f('baseBudget','Base budget',st.baseBudget,'number','0.01')}${f('ytdExpended','FYTD expended',st.ytdExpended,'number','0.01')}${f('paidThrough','Paid through',st.paidThrough)}${f('effectiveDate','Hour changes start',st.effectiveDate)}${f('seasonalFringePct','Seasonal pension/ins. %',st.seasonalFringePct,'number','0.01')}${f('fyEnd','Fiscal year end',st.fyEnd)}</div>
+   <p class="help" style="margin-top:10px">The 2.21% pension/insurance rate is taken from the 700804 lines. Interns have no fringe line.</p>
+   <h3 style="margin-top:16px">Semesters &amp; breaks</h3>
+   <div class="formgrid">${f('fallStart','Fall first day',st.fallStart)}${f('fallEnd','Fall last day',st.fallEnd)}${f('springStart','Spring first day',st.springStart)}${f('springEnd','Spring last day',st.springEnd)}${f('thanksgivingStart','Thanksgiving recess from',st.thanksgivingStart)}${f('thanksgivingEnd','Thanksgiving recess to',st.thanksgivingEnd)}${f('winterBlackoutStart','Seasonal off from',st.winterBlackoutStart)}${f('winterBlackoutEnd','Seasonal off to',st.winterBlackoutEnd)}${f('springBreakStart','Spring break from',st.springBreakStart)}${f('springBreakEnd','Spring break to',st.springBreakEnd)}
+   <label class="field">Interns work spring break?<select id="set-sb" data-s="internsWorkSpringBreak"><option value="1" ${st.internsWorkSpringBreak?'selected':''}>Yes</option><option value="0" ${!st.internsWorkSpringBreak?'selected':''}>No</option></select></label></div>
+   </div><div>
+   <h3>Holidays (no one works)</h3><p class="help">One per line: <code>YYYY-MM-DD Name</code>. These are the FY27 state holidays from 9/19/2026 to 6/30/2027. Add any extra closures.</p>
+   <textarea id="set-hol" aria-label="Holiday list">${st.holidays.map(h=>h[0]+' '+h[1]).join('\n')}</textarea>
+   <div class="toolbar"><button class="btn" data-act="saveHol">Save holidays</button></div>
+   <h3 style="margin-top:16px">Notes for the supervisor report</h3><p class="help">Printed on the PDF under “Notes”. Leave blank to skip.</p>
+   <textarea id="set-notes" data-s="reportNotes" style="min-height:110px;font-family:var(--f-body);font-size:.9rem" aria-label="Report notes">${esc(st.reportNotes||'')}</textarea>
+   </div></div>`;
+}
+
+function render(){
+  if(!S){
+    $('#summary').innerHTML=''; $('#alerts').innerHTML='';
+    $('#btn-pdf').disabled=true;
+    $('#tab-'+activeTab).innerHTML=`<div class="empty"><h3>No payroll plan loaded</h3><p>${signedIn?'Choose <b>Import plan</b> to load a plan file exported from this tool.':'Sign in to load the saved plan.'}</p></div>`;
+    return;
+  }
+  $('#btn-pdf').disabled=false;
+  const T=totals();
+  renderSummary(T);
+  if(activeTab==='emp') renderEmp(T);
+  if(activeTab==='pp') renderPP(T);
+  if(activeTab==='cap') renderCap(T);
+  if(activeTab==='set') renderSet();
+}
+
+/* ---------- events ---------- */
+document.querySelector('nav.tabs').addEventListener('click',ev=>{
+  const b=ev.target.closest('button[data-tab]'); if(!b) return;
+  activeTab=b.dataset.tab;
+  document.querySelectorAll('nav.tabs button').forEach(x=>x.setAttribute('aria-selected',x===b));
+  ['emp','pp','cap','set'].forEach(t=>$('#tab-'+t).hidden=t!==activeTab);
+  try{localStorage.setItem('ucaps-pay-tab',activeTab)}catch(e){}
+  render();
+});
+const findEmp=el=>{const tr=el.closest('tr[data-id]')||el.closest('tr.detail')?.previousElementSibling;return tr?S.employees.find(e=>e.id===tr.dataset.id):null};
+
+document.addEventListener('change',ev=>{
+  const t=ev.target;
+  if(t.dataset.f){
+    const e=findEmp(t); if(!e) return;
+    const f=t.dataset.f;
+    if(f==='rateOk') e.rateOk=t.checked;
+    else if(f==='include') e.include=t.value==='1';
+    else if(f==='rate'||f==='enc') e[f]=+t.value||0;
+    else e[f]=t.value;
+    commit();
+  } else if(t.dataset.sched){
+    const e=findEmp(t); if(!e) return;
+    const i=+t.dataset.i, v=Math.max(0,+t.value||0);
+    if(t.dataset.sched==='cur') e.cur[i]=v;
+    else { e.prop=e.prop||e.cur.slice(); e.prop[i]=v; if(e.prop.every((h,j)=>h===e.cur[j])) delete e.prop; }
+    commit();
+  } else if(t.dataset.s){
+    const k=t.dataset.s;
+    if(k==='internsWorkSpringBreak') S.settings[k]=t.value==='1';
+    else if(k==='reportNotes') S.settings[k]=t.value;
+    else if(t.type==='number') S.settings[k]=+t.value||0;
+    else if(t.value) S.settings[k]=t.value;
+    commit();
+  } else if(t.id&&t.id.startsWith('cap-')){
+    const k=t.id.slice(4); capForm[k]=(k==='rate'||k==='hrs')?(+t.value||0):t.value; render();
+  }
+});
+
+document.addEventListener('click',ev=>{
+  const b=ev.target.closest('[data-act]'); if(!b) return;
+  const a=b.dataset.act;
+  if(a==='pdf'){ if(S) supervisorPDF(); return; }
+  if(a==='export'){ if(S) exportPlan(); return; }
+  if(a==='import'){ $('#importfile').click(); return; }
+  if(!S) return;
+  const e=findEmp(b);
+  if(a==='toggle'){openRow=openRow===e.id?null:e.id;render();}
+  if(a==='clearprop'){delete e.prop;commit();}
+  if(a==='fit'){const p=project(e); if(p.supportedWk!=null) setWeekly(e,p.supportedWk); commit();}
+  if(a==='fitall'){S.employees.forEach(x=>{if(x.include===false) return; const p=project(x); if(p.supportedWk!=null) setWeekly(x,p.supportedWk);}); commit();}
+  if(a==='remove'){S.employees=S.employees.filter(x=>x!==e);openRow=null;commit();}
+  if(a==='addhire'){const id='new'+Date.now(); S.employees.push({id,name:'New hire',type:'intern',isNew:true,enc:0,start:S.settings.effectiveDate,end:S.settings.springEnd,rate:15,rateOk:true,cur:[0,0,0,0,0],prop:[2,2,2,2,2]}); openRow=id; commit();}
+  if(a==='caphire'){const id='new'+Date.now(); const h=capForm.hrs/5; S.employees.push({id,name:'New '+(capForm.type==='intern'?'intern':'seasonal'),type:capForm.type,isNew:true,enc:0,start:capForm.start,end:capForm.end,rate:capForm.rate,rateOk:true,cur:[h,h,h,h,h]}); activeTab='emp'; document.querySelector('nav.tabs button[data-tab="emp"]').click(); openRow=id; commit();}
+  if(a==='saveHol'){
+    S.settings.holidays=$('#set-hol').value.split('\n').map(l=>l.trim()).filter(l=>/^\d{4}-\d{2}-\d{2}/.test(l)).map(l=>[l.slice(0,10),l.slice(10).trim()||'Holiday']).sort();
+    commit(); b.textContent='Saved';
+  }
+  if(a==='resetconfirm'){$('#resetzone').innerHTML='Discard all edits? <button class="btn small danger" data-act="reset">Yes, reset</button>';}
+  if(a==='reset'){ if(S.baseline){S.settings=clone(S.baseline.settings);S.employees=clone(S.baseline.employees);} openRow=null;commit();}
+});
+
+/* Round to quarter hours and spread over the days they already work */
+function setWeekly(e,wk){
+  const base=e.prop||e.cur, tot=sum(base);
+  if(!tot) return;
+  let p=base.map(h=>Math.floor(h/tot*wk*4)/4);
+  e.prop=p; if(e.prop.every((h,j)=>h===e.cur[j])) delete e.prop;
+}
+
+function migrate(o){
+  if(!o||!Array.isArray(o.employees)||!o.settings) return null;
+  if(o.version===3){o.employees.forEach(e=>{if(e.type==='intern'&&e.end==='2027-05-08')e.end='2027-04-29'});o.version=4;}
+  return o.version===4?o:null;
+}
+
+/* ---------- persistence: UCAPS shared store (Supabase, approved users only) ---------- */
+const STORE_KEY='ucaps_payroll_plan_fy27';
+let saveTimer=null, writing=false, pending=false, signedIn=false;
+const stamp=iso=>new Date(iso).toLocaleString([], {month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'});
+function commit(){render(); queueSave();}
+function queueSave(){ if(!signedIn||!S) return; clearTimeout(saveTimer); $('#savestate').textContent='Saving…'; saveTimer=setTimeout(doSave,700); }
+async function doSave(){
+  if(writing){pending=true;return;}
+  writing=true;
+  try{
+    const sb=await ucapsClient, u=ucapsUser();
+    const {error}=await sb.from('ucaps_store').upsert({key:STORE_KEY,value:JSON.stringify(S),updated_at:new Date().toISOString(),updated_by:u&&u.email});
+    if(error) throw error;
+    $('#savestate').textContent='Saved · '+stamp(new Date().toISOString());
+  }catch(err){ $('#savestate').textContent='Not saved — '+(err&&err.message||'check your connection'); }
+  writing=false; if(pending){pending=false;doSave();}
+}
+try{const t=localStorage.getItem('ucaps-pay-tab'); if(t&&t!=='emp') setTimeout(()=>document.querySelector(`nav.tabs button[data-tab="${t}"]`)?.click(),0);}catch(e){}
+render();
+
+if(typeof ucapsGate==='function') ucapsGate().then(async()=>{
+  signedIn=true;
+  try{
+    const sb=await ucapsClient;
+    const {data,error}=await sb.from('ucaps_store').select('value,updated_at,updated_by').eq('key',STORE_KEY).maybeSingle();
+    if(error) throw error;
+    if(data){ S=migrate(JSON.parse(data.value)); $('#savestate').textContent='Last saved '+stamp(data.updated_at)+(data.updated_by?' by '+data.updated_by:''); }
+    else $('#savestate').textContent='Nothing saved yet';
+  }catch(err){ $('#savestate').textContent='Could not load the plan — '+(err.message||err); }
+  render();
+});
+
+/* ---------- export / import ---------- */
+function saveFile(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+function exportPlan(){ saveFile('UCAPS_Payroll_Plan_'+ISO(Date.now())+'.json', new Blob([JSON.stringify(S,null,2)],{type:'application/json'})); }
+$('#importfile').addEventListener('change',async ev=>{
+  const f=ev.target.files[0]; ev.target.value=''; if(!f) return;
+  try{
+    const o=migrate(JSON.parse(await f.text()));
+    if(!o) throw new Error('This file is not a payroll plan exported from this tool.');
+    if(!o.baseline) o.baseline={settings:clone(o.settings),employees:clone(o.employees)};
+    S=o; openRow=null; commit();
+    $('#savestate').textContent='Imported '+f.name+(signedIn?' — saving…':'');
+  }catch(err){ $('#savestate').textContent='Import failed: '+err.message; }
+});
+
+/* ---------- supervisor report (drawn natively with jsPDF + autoTable) ---------- */
+function supervisorPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc=new jsPDF({orientation:'landscape',unit:'pt',format:'letter'});
+  const W=doc.internal.pageSize.getWidth(), M=40;
+  const T=totals(), st=S.settings, ps=periods(T), u=(typeof ucapsUser==='function'&&ucapsUser())||{};
+  const GREEN=[31,95,74], RED=[179,38,30], INK=[29,38,34], MUTED=[94,106,100], SOFT=[227,239,233];
+  const m=n=>(n<0?'-':'')+'$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const firstNeg=ps.find(p=>p.bal<0);
+  const today=new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  const base={theme:'grid',margin:{left:M,right:M},styles:{font:'helvetica',fontSize:8.5,cellPadding:4,textColor:INK,lineColor:[217,222,216],lineWidth:.5},
+    headStyles:{fillColor:GREEN,textColor:255,fontStyle:'bold',fontSize:8},alternateRowStyles:{fillColor:[247,249,246]}};
+  const redNeg=data=>{ if(data.section==='body'&&typeof data.cell.raw==='string'&&/^-\$/.test(data.cell.raw)) data.cell.styles.textColor=RED; };
+  const heading=(text,y)=>{ if(y>doc.internal.pageSize.getHeight()-90){doc.addPage();y=M;} doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...GREEN);doc.text(text,M,y);return y+8; };
+  const after=()=>doc.lastAutoTable.finalY+22;
+
+  // title block
+  doc.setFillColor(...GREEN); doc.rect(0,0,W,64,'F');
+  doc.setTextColor(255); doc.setFont('helvetica','bold'); doc.setFontSize(18);
+  doc.text('UCAPS Contract Payroll — Supervisor Report',M,30);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5);
+  doc.text('Fund 52110 Gen Ops Contract Payroll  ·  DeptID L300801000  ·  FY27 (through '+fmtD(st.fyEnd)+')',M,48);
+  doc.text('Prepared '+today+(u.name||u.email?' by '+(u.name||u.email):''),W-M,48,{align:'right'});
+
+  // status line
+  let y=88;
+  const over=T.balProj<0;
+  doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(...(over?RED:GREEN));
+  doc.text((over?'Projected year-end shortfall: ':'Projected year-end surplus: ')+m(T.balProj),M,y);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(...MUTED);
+  doc.text('Paid through '+fmtD(st.paidThrough)+'  ·  hour changes effective '+fmtD(st.effectiveDate)+'  ·  '+
+    (firstNeg?'at the planned hours, funds run out in the pay period ending '+fmtD(firstNeg.b):'at the planned hours, funds last through '+fmtD(st.fyEnd)),M,y+15);
+  y+=30;
+
+  // budget summary
+  doc.autoTable({...base,startY:y,tableWidth:(W-2*M)*0.62,
+    head:[['','Per encumbrance report','Per schedule (projected)']],
+    body:[['Base budget',m(st.baseBudget),m(st.baseBudget)],
+          ['FYTD expended',m(-st.ytdExpended),m(-st.ytdExpended)],
+          ['Encumbered / projected remaining cost',m(-T.encReport),m(-T.projected)],
+          ['Balance',m(T.balEnc),m(T.balProj)]],
+    columnStyles:{1:{halign:'right'},2:{halign:'right'}},
+    didParseCell:d=>{redNeg(d); if(d.section==='body'&&d.row.index===3) d.cell.styles.fontStyle='bold';}});
+  y=after();
+
+  // employees
+  y=heading('Employees — projected cost vs. encumbrance',y);
+  const body=[];
+  for(const [g,label] of [['seasonal','Contracted Seasonal Employees (728300 + 2.21% pension/ins. 700804)'],['intern','Contracted Student Interns-CC5 (730015)']]){
+    const rs=T.rows.filter(r=>r.e.type===g); if(!rs.length) continue;
+    body.push([{content:label,colSpan:9,styles:{fillColor:SOFT,textColor:GREEN,fontStyle:'bold'}}]);
+    for(const {e,p} of rs){
+      const inc=e.include!==false;
+      const status=!inc?'Not counted':e.isNew?'New hire':(e.end<st.effectiveDate?'Ends '+fmtD(e.end):(p.encTotal===0?'No encumbrance yet':''));
+      body.push([e.name+(status?'  ('+status+')':''), '$'+e.rate.toFixed(2), hrs(sum(e.cur)), e.prop?hrs(sum(e.prop)):'—', hrs(p.hours), m(p.cost), m(p.encTotal),
+        inc?(Math.abs(p.diff)<1?'—':(p.diff>0?'Release '+m(p.diff):'Add '+m(-p.diff))):'', fmtD(e.end)]);
+    }
+    const inc=rs.filter(r=>r.e.include!==false);
+    body.push([{content:'Subtotal',styles:{fontStyle:'bold'}},'',hrs(sum(inc.map(r=>sum(r.e.cur)))),hrs(sum(inc.map(r=>sum(r.e.prop||r.e.cur)))),hrs(sum(inc.map(r=>r.p.hours))),
+      {content:m(sum(inc.map(r=>r.p.cost))),styles:{fontStyle:'bold'}},{content:m(sum(inc.map(r=>r.p.encTotal))),styles:{fontStyle:'bold'}},'','']);
+  }
+  for(const o of st.otherEncumbrances) body.push([o.label+' (fixed)','','','','',m(o.amount),m(o.amount),'','']);
+  body.push([{content:'Total',styles:{fontStyle:'bold'}},'','','','',{content:m(T.projected),styles:{fontStyle:'bold'}},{content:m(T.encIncluded),styles:{fontStyle:'bold'}},'','']);
+  doc.autoTable({...base,startY:y,head:[['Employee','Rate','Hrs/wk now','Hrs/wk new','Hrs left','Projected cost','Encumbered','Encumbrance change','Ends']],body,
+    columnStyles:{0:{cellWidth:210},1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'}},
+    didParseCell:d=>{ if(d.section==='body'&&d.column.index===7&&typeof d.cell.raw==='string'){ if(d.cell.raw.startsWith('Add')) d.cell.styles.textColor=RED; if(d.cell.raw.startsWith('Release')) d.cell.styles.textColor=GREEN; } }});
+  y=after();
+
+  // proposed changes
+  const changes=[];
+  T.rows.forEach(({e,p})=>{
+    if(e.include===false) return;
+    if(e.isNew) changes.push(['New hire',e.name+' — '+(e.type==='intern'?'Student Intern':'Seasonal')+', $'+e.rate.toFixed(2)+'/hr, '+hrs(sum(e.prop||e.cur))+' hrs/wk, '+fmtD(e.start||st.effectiveDate)+' to '+fmtD(e.end),m(p.cost)]);
+    else if(e.prop) changes.push(['Hours change',e.name+' — '+hrs(sum(e.cur))+' to '+hrs(sum(e.prop))+' hrs/wk from '+fmtD(st.effectiveDate)+' ('+DAYS.map((d,i)=>d+' '+hrs(e.prop[i])).join(', ')+')',m(p.cost)]);
+    if(e.note) changes.push(['Note',e.name+' — '+e.note,'']);
+  });
+  if(changes.length){
+    y=heading('Proposed changes and notes',y);
+    doc.autoTable({...base,startY:y,head:[['Type','Detail','Projected cost']],body:changes,columnStyles:{0:{cellWidth:90,fontStyle:'bold'},2:{halign:'right',cellWidth:100}}});
+    y=after();
+  }
+  if(st.reportNotes&&st.reportNotes.trim()){
+    y=heading('Notes',y);
+    doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.setTextColor(...INK);
+    const lines=doc.splitTextToSize(st.reportNotes.trim(),W-2*M); doc.text(lines,M,y+8); y+=lines.length*12+24;
+  }
+
+  // pay periods
+  y=heading('Bi-weekly pay period projection',y);
+  doc.autoTable({...base,startY:y,head:[['Pay period','Seasonal','Interns','Period total','Balance after']],
+    body:ps.map(p=>[fmtD(p.a)+' – '+fmtD(p.b)+(p.a<st.effectiveDate?'  (current hours)':''),m(p.sea),m(p.int),m(p.total),m(p.bal)]),
+    columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'}},didParseCell:redNeg});
+  y=after();
+
+  // assumptions
+  y=heading('How these figures are calculated',y);
+  const rules=[
+    'Projected cost = remaining scheduled hours × hourly rate, counted day by day from '+fmtD(addDays(st.paidThrough,1))+' (day after the last paid date) to each contract end.',
+    'Seasonal employees carry '+st.seasonalFringePct+'% pension/insurance (700804). Interns have no fringe.',
+    'No one works holidays or Thanksgiving recess ('+fmtD(st.thanksgivingStart)+'–'+fmtD(st.thanksgivingEnd)+'). Seasonal employees do not work '+fmtD(st.winterBlackoutStart)+'–'+fmtD(st.winterBlackoutEnd)+'.',
+    'Student interns work only from the first to the last day of classes: Fall '+fmtD(st.fallStart)+'–'+fmtD(st.fallEnd)+', Spring '+fmtD(st.springStart)+'–'+fmtD(st.springEnd)+(st.internsWorkSpringBreak?'.':', excluding spring break '+fmtD(st.springBreakStart)+'–'+fmtD(st.springBreakEnd)+'.'),
+    'Holidays: '+st.holidays.map(h=>fmtD(h[0])+' '+h[1]).join('; ')+'.'
+  ];
+  doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(...INK);
+  y+=8;
+  for(const r of rules){ const ls=doc.splitTextToSize('•  '+r,W-2*M); if(y+ls.length*11>doc.internal.pageSize.getHeight()-40){doc.addPage();y=M;} doc.text(ls,M,y); y+=ls.length*11+3; }
+
+  // footer on every page
+  const n=doc.getNumberOfPages(), H=doc.internal.pageSize.getHeight();
+  for(let i=1;i<=n;i++){ doc.setPage(i); doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...MUTED);
+    doc.text('UCAPS internal — contains employee pay information',M,H-18); doc.text('Page '+i+' of '+n,W-M,H-18,{align:'right'}); }
+  doc.save('UCAPS_Payroll_Supervisor_Report_'+ISO(Date.now())+'.pdf');
+}
+</script>
+
+</body>
+</html>

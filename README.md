@@ -23,6 +23,11 @@ ucaps-tools/              ← your GitHub repository root
 ├── license-tracker/
 │   └── index.html        ← License & Maintenance Renewal Tracker
 │
+├── payroll-planner/
+│   └── index.html        ← Contract Payroll Planner (fund 52110). Employee data lives
+│                           only in Supabase (ucaps_store key ucaps_payroll_plan_fy27) —
+│                           never commit plan exports or encumbrance reports here
+│
 └── vvv-badge/
     └── index.html        ← VVV Badge Review Portal
 ```
