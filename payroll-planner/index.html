@@ -414,7 +414,7 @@ function renderSet(){
   const st=S.settings;
   const f=(id,label,val,type='date',step)=>`<label class="field">${label}<input type="${type}" ${step?`step="${step}"`:''} id="set-${id}" data-s="${id}" value="${val}"></label>`;
   $('#tab-set').innerHTML=`<div class="grid2"><div>
-   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Every save also updates the Ambassadors and Student Parking Enforcers lines on the FY Budget Tracker’s Payroll tab.</p>
+   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Every save also updates the Ambassadors, Student Parking Enforcers and Cell Phone Reimbursements lines on the FY Budget Tracker’s Payroll tab.</p>
    <div class="formgrid">${f('baseBudget','Base budget',st.baseBudget,'number','0.01')}${f('ytdExpended','FYTD expended',st.ytdExpended,'number','0.01')}${f('paidThrough','Paid through',st.paidThrough)}${f('effectiveDate','Hour changes start',st.effectiveDate)}${f('seasonalFringePct','Seasonal pension/ins. %',st.seasonalFringePct,'number','0.01')}${f('fyEnd','Fiscal year end',st.fyEnd)}</div>
    <p class="help" style="margin-top:10px">The 2.21% pension/insurance rate is taken from the 700804 lines. Interns have no fringe line.</p>
    <h3 style="margin-top:16px">Semesters &amp; breaks</h3>
@@ -568,7 +568,8 @@ function buildSummary(){
   return {version:1, savedAt:new Date().toISOString(), savedBy:u.email||'', paidThrough:st.paidThrough, effectiveDate:st.effectiveDate, fyEnd:st.fyEnd,
     baseBudget:st.baseBudget, ytdExpended:st.ytdExpended, encReport:+T.encReport.toFixed(2), other:T.other,
     projected:+T.projected.toFixed(2), balEnc:+T.balEnc.toFixed(2), balProj:+T.balProj.toFixed(2), runOut:neg?neg.b:null,
-    groups:{seasonal:grp('seasonal'), intern:grp('intern')}};
+    groups:{seasonal:grp('seasonal'), intern:grp('intern'),
+      reimb:{encumbered:+T.other.toFixed(2), projected:+T.other.toFixed(2), items:st.otherEncumbrances.length}}};
 }
 async function writeSummary(sb){
   const u=ucapsUser();
