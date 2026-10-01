@@ -105,7 +105,7 @@ textarea{font-family:var(--f-num);font-size:.82rem;width:100%;min-height:220px;b
 <body>
 
 <div class="wrap">
-  <a class="back" href="../index.html">← UCAPS Tools</a>
+  <a class="back" href="../index.html">← UCAPS Tools</a> <span class="meta">·</span> <a class="back" href="../budget-tracker/index.html">FY Budget Tracker →</a>
   <header class="top">
     <div>
       <h1>UCAPS Contract Payroll Planner</h1>
@@ -414,7 +414,7 @@ function renderSet(){
   const st=S.settings;
   const f=(id,label,val,type='date',step)=>`<label class="field">${label}<input type="${type}" ${step?`step="${step}"`:''} id="set-${id}" data-s="${id}" value="${val}"></label>`;
   $('#tab-set').innerHTML=`<div class="grid2"><div>
-   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out.</p>
+   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Every save also updates the Ambassadors and Student Parking Enforcers lines on the FY Budget Tracker’s Payroll tab.</p>
    <div class="formgrid">${f('baseBudget','Base budget',st.baseBudget,'number','0.01')}${f('ytdExpended','FYTD expended',st.ytdExpended,'number','0.01')}${f('paidThrough','Paid through',st.paidThrough)}${f('effectiveDate','Hour changes start',st.effectiveDate)}${f('seasonalFringePct','Seasonal pension/ins. %',st.seasonalFringePct,'number','0.01')}${f('fyEnd','Fiscal year end',st.fyEnd)}</div>
    <p class="help" style="margin-top:10px">The 2.21% pension/insurance rate is taken from the 700804 lines. Interns have no fringe line.</p>
    <h3 style="margin-top:16px">Semesters &amp; breaks</h3>
@@ -534,6 +534,7 @@ async function doSave(){
     const sb=await ucapsClient, u=ucapsUser();
     const {error}=await sb.from('ucaps_store').upsert({key:STORE_KEY,value:JSON.stringify(S),updated_at:new Date().toISOString(),updated_by:u&&u.email});
     if(error) throw error;
+    await writeSummary(sb);
     $('#savestate').textContent='Saved · '+stamp(new Date().toISOString());
   }catch(err){ $('#savestate').textContent='Not saved — '+(err&&err.message||'check your connection'); }
   writing=false; if(pending){pending=false;doSave();}
@@ -547,11 +548,33 @@ if(typeof ucapsGate==='function') ucapsGate().then(async()=>{
     const sb=await ucapsClient;
     const {data,error}=await sb.from('ucaps_store').select('value,updated_at,updated_by').eq('key',STORE_KEY).maybeSingle();
     if(error) throw error;
-    if(data){ S=migrate(JSON.parse(data.value)); $('#savestate').textContent='Last saved '+stamp(data.updated_at)+(data.updated_by?' by '+data.updated_by:''); }
+    if(data){ S=migrate(JSON.parse(data.value)); if(S) writeSummary(sb).catch(()=>{}); $('#savestate').textContent='Last saved '+stamp(data.updated_at)+(data.updated_by?' by '+data.updated_by:''); }
     else $('#savestate').textContent='Nothing saved yet';
   }catch(err){ $('#savestate').textContent='Could not load the plan — '+(err.message||err); }
   render();
 });
+
+/* ---------- feed for the FY Budget Tracker (Payroll tab) ----------
+   Group totals only, no names. Ambassadors line = seasonal, Student Parking Enforcers line = intern. */
+const SUMMARY_KEY='ucaps_payroll_summary_fy27';
+function buildSummary(){
+  const T=totals(), st=S.settings, ps=periods(T), neg=ps.find(p=>p.bal<0);
+  const grp=type=>{ const r=T.inc.filter(x=>x.e.type===type);
+    return {people:r.filter(x=>x.p.hoursAfter>0).length, hrsNow:sum(r.filter(x=>x.p.hoursAfter>0).map(x=>sum(x.e.cur))), hrsNew:sum(r.filter(x=>x.p.hoursAfter>0).map(x=>sum(x.e.prop||x.e.cur))),
+      encumbered:+sum(r.map(x=>x.p.encTotal)).toFixed(2), projected:+sum(r.map(x=>x.p.cost)).toFixed(2),
+      release:+sum(r.map(x=>Math.max(x.p.diff,0))).toFixed(2), add:+sum(r.map(x=>Math.max(-x.p.diff,0))).toFixed(2),
+      unencumbered:r.filter(x=>x.p.encTotal===0).length}; };
+  const u=(typeof ucapsUser==='function'&&ucapsUser())||{};
+  return {version:1, savedAt:new Date().toISOString(), savedBy:u.email||'', paidThrough:st.paidThrough, effectiveDate:st.effectiveDate, fyEnd:st.fyEnd,
+    baseBudget:st.baseBudget, ytdExpended:st.ytdExpended, encReport:+T.encReport.toFixed(2), other:T.other,
+    projected:+T.projected.toFixed(2), balEnc:+T.balEnc.toFixed(2), balProj:+T.balProj.toFixed(2), runOut:neg?neg.b:null,
+    groups:{seasonal:grp('seasonal'), intern:grp('intern')}};
+}
+async function writeSummary(sb){
+  const u=ucapsUser();
+  const {error}=await sb.from('ucaps_store').upsert({key:SUMMARY_KEY,value:JSON.stringify(buildSummary()),updated_at:new Date().toISOString(),updated_by:u&&u.email});
+  if(error) throw error;
+}
 
 /* ---------- export / import ---------- */
 function saveFile(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
