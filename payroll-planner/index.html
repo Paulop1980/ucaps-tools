@@ -229,11 +229,14 @@ function totals(){
   const st=S.settings;
   const rows=S.employees.map(e=>({e,p:project(e)}));
   const inc=rows.filter(r=>r.e.include!==false);
+  // reimbursement lines: amount = cost through 6/30, enc = amount encumbered on the report (defaults to amount)
+  const oeEnc=o=>o.enc==null?(+o.amount||0):(+o.enc||0);
   const other=sum(st.otherEncumbrances.map(o=>o.amount));
-  const encReport=sum(S.employees.filter(e=>!e.isNew).map(e=>(+e.enc||0)+(+e.fringeEnc||0)))+other;
-  const encIncluded=sum(inc.map(r=>r.p.encTotal))+other;
+  const otherEnc=sum(st.otherEncumbrances.map(oeEnc));
+  const encReport=sum(S.employees.filter(e=>!e.isNew).map(e=>(+e.enc||0)+(+e.fringeEnc||0)))+otherEnc;
+  const encIncluded=sum(inc.map(r=>r.p.encTotal))+otherEnc;
   const projected=sum(inc.map(r=>r.p.cost))+other;
-  return {rows,inc,other,encReport,encIncluded,projected,
+  return {rows,inc,other,otherEnc,encReport,encIncluded,projected,
     available:st.baseBudget-st.ytdExpended,
     balEnc:st.baseBudget-st.ytdExpended-encReport,
     balProj:st.baseBudget-st.ytdExpended-projected};
@@ -328,7 +331,14 @@ function renderEmp(T){
     body+=`<tr class="group"><td colspan="10">${label}</td></tr>`+rs.map(empRow).join('')+
       `<tr class="sub"><td>Subtotal (counted)</td><td></td><td class="r num">${hrs(sum(inc.map(r=>sum(r.e.cur))))}</td><td class="r num">${hrs(sum(inc.map(r=>sum(r.e.prop||r.e.cur))))}</td><td class="r num">${hrs(sum(inc.map(r=>r.p.hours)))}</td><td class="r num">${money(sum(inc.map(r=>r.p.cost)))}</td><td class="r num">${money(sum(inc.map(r=>r.p.encTotal)))}</td><td class="r num ${cls(sum(inc.map(r=>r.p.diff)))}">${money(sum(inc.map(r=>r.p.diff)))}</td><td></td><td></td></tr>`;
   }
-  body+=S.settings.otherEncumbrances.map(o=>`<tr><td colspan="5"><span class="name">${esc(o.label)}</span><div class="meta">Fixed — counted as-is</div></td><td class="r num">${money(o.amount)}</td><td class="r num">${money(o.amount)}</td><td colspan="3"></td></tr>`).join('');
+  body+=`<tr class="group"><td colspan="10">Employee reimbursements · 727600 (cell phones)</td></tr>`+S.settings.otherEncumbrances.map((o,i)=>{
+    const enc=o.enc==null?o.amount:o.enc, d=enc-o.amount;
+    return `<tr><td colspan="4"><input class="wide" id="oe-lbl-${i}" data-oe="${i}" data-of="label" value="${esc(o.label)}" aria-label="Reimbursement name"><div class="meta">${o.note?esc(o.note)+' · ':''}fixed cost through ${fmtD(S.settings.fyEnd)}</div></td>
+     <td class="r"><button class="btn small danger" data-act="oe-remove" data-i="${i}">Remove</button></td>
+     <td class="r" style="white-space:nowrap">$<input type="number" step="0.01" class="money" id="oe-amt-${i}" data-oe="${i}" data-of="amount" value="${o.amount}" aria-label="Cost through year end"></td>
+     <td class="r" style="white-space:nowrap">$<input type="number" step="0.01" class="money" id="oe-enc-${i}" data-oe="${i}" data-of="enc" value="${enc}" aria-label="Encumbered"></td>
+     <td class="r">${Math.abs(d)<1?'<span class="pill good">Matches</span>':d>0?`<span class="pill good">+${money0(d)} spare</span>`:(enc===0?'<span class="pill warn">No encumbrance</span>':`<span class="pill bad">${money0(d)} short</span>`)}</td><td colspan="2"></td></tr>`;}).join('')+
+    `<tr><td colspan="10"><button class="btn small" data-act="oe-add">+ Add a cell phone reimbursement</button></td></tr>`;
   $('#tab-emp').innerHTML=`<h3>Employees &amp; encumbrances</h3>
    <p class="help">Projected cost = remaining scheduled hours × rate, from ${fmtD(addDays(S.settings.paidThrough,1))} to each contract end. Holidays and Thanksgiving recess are skipped for everyone. Seasonal staff skip ${fmtD(S.settings.winterBlackoutStart)}–${fmtD(S.settings.winterBlackoutEnd)}. Interns work only from the first to the last day of classes. Open <b>Edit hours</b> to change someone's weekly hours from ${fmtD(S.settings.effectiveDate)} on.</p>
    <div class="scroll"><table>
@@ -340,7 +350,7 @@ function renderEmp(T){
 function periods(T){
   const st=S.settings, list=[];
   for(let s=addDays(st.paidThrough,1); s<=st.fyEnd; s=addDays(s,14)) list.push([s, addDays(s,13)<st.fyEnd?addDays(s,13):st.fyEnd]);
-  let run=T.available-T.other;
+  let run=T.available-T.other;   // reimbursements deducted up front
   return list.map(([a,b])=>{
     let sea=0,int=0;
     for(const {e,p} of T.inc){
@@ -356,7 +366,7 @@ function renderPP(T){
   const ps=periods(T), max=Math.max(...ps.map(p=>p.total),1);
   const firstNeg=ps.find(p=>p.bal<0);
   $('#tab-pp').innerHTML=`<h3>Bi-weekly pay periods</h3>
-   <p class="help">Projected payroll for each two-week period after ${fmtD(S.settings.paidThrough)}, with the balance left after it. The starting balance is the base budget minus FYTD expenditure and the $${S.settings.otherEncumbrances.reduce((a,o)=>a+o.amount,0).toLocaleString()} reimbursement. ${firstNeg?`<b style="color:var(--bad)">At this pace the money runs out in the period ending ${fmtD(firstNeg.b)}.</b>`:'<b style="color:var(--good)">At this pace the budget lasts through 6/30.</b>'}</p>
+   <p class="help">Projected payroll for each two-week period after ${fmtD(S.settings.paidThrough)}, with the balance left after it. The starting balance is the base budget minus FYTD expenditure and ${money(T.other)} in cell phone reimbursements. ${firstNeg?`<b style="color:var(--bad)">At this pace the money runs out in the period ending ${fmtD(firstNeg.b)}.</b>`:'<b style="color:var(--good)">At this pace the budget lasts through 6/30.</b>'}</p>
    <div class="scroll"><table><thead><tr><th>Period</th><th class="r">Seasonal</th><th class="r">Interns</th><th class="r">Period total</th><th style="min-width:110px"></th><th class="r">Balance after</th></tr></thead><tbody>
    ${ps.map((p,i)=>`<tr><td class="num">${fmtD(p.a)} – ${fmtD(p.b)}${p.a<S.settings.effectiveDate?'<span class="chip">current hours</span>':''}</td><td class="r num">${money(p.sea)}</td><td class="r num">${money(p.int)}</td><td class="r num"><b>${money(p.total)}</b></td><td><div class="bar"><span style="width:${(p.total/max*100).toFixed(1)}%"></span></div></td><td class="r num ${cls(p.bal)}">${money(p.bal)}</td></tr>`).join('')}
    </tbody></table></div>`;
@@ -466,6 +476,9 @@ document.addEventListener('change',ev=>{
     else if(f==='rate'||f==='enc') e[f]=+t.value||0;
     else e[f]=t.value;
     commit();
+  } else if(t.dataset.oe!=null){
+    const o=S.settings.otherEncumbrances[+t.dataset.oe]; if(!o) return;
+    o[t.dataset.of]=t.dataset.of==='label'?t.value:(+t.value||0); commit();
   } else if(t.dataset.sched){
     const e=findEmp(t); if(!e) return;
     const i=+t.dataset.i, v=Math.max(0,+t.value||0);
@@ -496,6 +509,8 @@ document.addEventListener('click',ev=>{
   if(a==='clearprop'){delete e.prop;commit();}
   if(a==='fit'){const p=project(e); if(p.supportedWk!=null) setWeekly(e,p.supportedWk); commit();}
   if(a==='fitall'){S.employees.forEach(x=>{if(x.include===false) return; const p=project(x); if(p.supportedWk!=null) setWeekly(x,p.supportedWk);}); commit();}
+  if(a==='oe-add'){ S.settings.otherEncumbrances.push({label:'Cell phone reimbursement — new',amount:0,enc:0,note:'$60/month'}); commit(); return; }
+  if(a==='oe-remove'){ S.settings.otherEncumbrances.splice(+b.dataset.i,1); commit(); return; }
   if(a==='remove'){S.employees=S.employees.filter(x=>x!==e);openRow=null;commit();}
   if(a==='addhire'){const id='new'+Date.now(); S.employees.push({id,name:'New hire',type:'intern',isNew:true,enc:0,start:S.settings.effectiveDate,end:S.settings.springEnd,rate:15,rateOk:true,cur:[0,0,0,0,0],prop:[2,2,2,2,2]}); openRow=id; commit();}
   if(a==='caphire'){const id='new'+Date.now(); const h=capForm.hrs/5; S.employees.push({id,name:'New '+(capForm.type==='intern'?'intern':'seasonal'),type:capForm.type,isNew:true,enc:0,start:capForm.start,end:capForm.end,rate:capForm.rate,rateOk:true,cur:[h,h,h,h,h]}); activeTab='emp'; document.querySelector('nav.tabs button[data-tab="emp"]').click(); openRow=id; commit();}
@@ -569,7 +584,7 @@ function buildSummary(){
     baseBudget:st.baseBudget, ytdExpended:st.ytdExpended, encReport:+T.encReport.toFixed(2), other:T.other,
     projected:+T.projected.toFixed(2), balEnc:+T.balEnc.toFixed(2), balProj:+T.balProj.toFixed(2), runOut:neg?neg.b:null,
     groups:{seasonal:grp('seasonal'), intern:grp('intern'),
-      reimb:{encumbered:+T.other.toFixed(2), projected:+T.other.toFixed(2), items:st.otherEncumbrances.length}}};
+      reimb:{encumbered:+T.otherEnc.toFixed(2), projected:+T.other.toFixed(2), items:st.otherEncumbrances.length, pending:st.otherEncumbrances.filter(o=>o.enc===0).length}}};
 }
 async function writeSummary(sb){
   const u=ucapsUser();
@@ -652,7 +667,7 @@ function supervisorPDF(){
     body.push([{content:'Subtotal',styles:{fontStyle:'bold'}},'',hrs(sum(inc.map(r=>sum(r.e.cur)))),hrs(sum(inc.map(r=>sum(r.e.prop||r.e.cur)))),hrs(sum(inc.map(r=>r.p.hours))),
       {content:m(sum(inc.map(r=>r.p.cost))),styles:{fontStyle:'bold'}},{content:m(sum(inc.map(r=>r.p.encTotal))),styles:{fontStyle:'bold'}},'','']);
   }
-  for(const o of st.otherEncumbrances) body.push([o.label+' (fixed)','','','','',m(o.amount),m(o.amount),'','']);
+  for(const o of st.otherEncumbrances){ const enc=o.enc==null?o.amount:o.enc, d=enc-o.amount; body.push([o.label+(o.note?'  ('+o.note+')':''),'','','','',m(o.amount),m(enc),Math.abs(d)<1?'—':(d>0?'Release '+m(d):'Add '+m(-d)),fmtD(st.fyEnd)]); }
   body.push([{content:'Total',styles:{fontStyle:'bold'}},'','','','',{content:m(T.projected),styles:{fontStyle:'bold'}},{content:m(T.encIncluded),styles:{fontStyle:'bold'}},'','']);
   doc.autoTable({...base,startY:y,head:[['Employee','Rate','Hrs/wk now','Hrs/wk new','Hrs left','Projected cost','Encumbered','Encumbrance change','Ends']],body,
     columnStyles:{0:{cellWidth:210},1:{halign:'right'},2:{halign:'right'},3:{halign:'right'},4:{halign:'right'},5:{halign:'right'},6:{halign:'right'},7:{halign:'right'},8:{halign:'right'}},

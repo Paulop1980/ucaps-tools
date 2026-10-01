@@ -1574,7 +1574,10 @@ function plannerPanelHtml(){
 function plannerLineHtml(it){
   var g = plannerGroup(it);
   if(g && it.plannerLink==="reimb"){
-    return '<div class="planner-line">Linked to the Payroll Planner ('+PLANNER_GROUP_LABEL.reimb+'): encumbered on fund 52110 <b>'+money(g.encumbered)+'</b>, counted as a fixed cost through 6/30.</div>';
+    var short = round2(g.projected - g.encumbered);
+    return '<div class="planner-line">Linked to the Payroll Planner ('+PLANNER_GROUP_LABEL.reimb+'): '+g.items+' phone'+(g.items===1?'':'s')+
+      ' · cost through 6/30 <b>'+money(g.projected)+'</b> vs encumbered <b>'+money(g.encumbered)+'</b>'+
+      (short>0.5?' · <b style="color:#b3392f">'+money(short)+' not encumbered yet</b>'+(g.pending?' ('+g.pending+' pending approval)':''):'')+'</div>';
   }
   if(g){
     var diff = round2(g.encumbered - g.projected);
