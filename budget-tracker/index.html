@@ -277,6 +277,18 @@ a{ color:var(--lic); }
 @media (max-width:900px){ .pay-card-figs{ grid-template-columns:repeat(3,1fr); } }
 @media (max-width:560px){ .pay-card-figs{ grid-template-columns:repeat(2,1fr); } }
 .pay-card-actions{ margin-top:10px; display:flex; gap:14px; flex-wrap:wrap; }
+/* Contract Payroll Planner feed */
+.planner-panel{ background:var(--card); border:1px solid var(--line); border-left:4px solid #1f5f4a; border-radius:12px; padding:16px 18px; margin-top:18px; }
+.planner-panel h3{ font-family:'Fraunces',serif; font-size:17px; font-weight:600; color:var(--navy); margin:0; }
+.planner-panel .pp-meta{ font-size:12px; color:#8b8472; margin-top:3px; }
+.planner-figs{ display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-top:12px; }
+@media (max-width:900px){ .planner-figs{ grid-template-columns:repeat(3,1fr); } }
+@media (max-width:560px){ .planner-figs{ grid-template-columns:repeat(2,1fr); } }
+.planner-note{ margin-top:10px; font-size:12.5px; line-height:1.5; }
+.planner-warn{ margin-top:10px; font-size:12.5px; background:#fbefd5; color:#5c3a00; border-radius:8px; padding:8px 10px; }
+.planner-line{ margin-top:10px; padding:9px 12px; background:#eef5f1; border-radius:8px; font-size:12.5px; line-height:1.55; color:#1c2230; }
+.planner-line b{ font-weight:600; }
+.fig-sub{ font-size:10px; color:#1f5f4a; font-weight:600; margin-top:1px; }
 .fc-worksheet{ margin-top:12px; padding:12px 14px; background:#f7f3ea; border:1px dashed var(--line); border-radius:9px; }
 .fc-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:10px; }
 @media (max-width:900px){ .fc-grid{ grid-template-columns:repeat(4,1fr); } }
@@ -337,7 +349,7 @@ a{ color:var(--lic); }
 
     <div class="fund-block" id="ov-pay-block">
       <div class="fund-block-hdr">
-        <h2>Fund 52100 — Gen Ops Contract Payroll</h2>
+        <h2>Fund 52110 — Gen Ops Contract Payroll</h2>
         <span class="fund-recon-tag" id="ov-pay-recon"></span>
       </div>
       <div id="ov-pay-bar"></div>
@@ -392,7 +404,8 @@ a{ color:var(--lic); }
   <section class="tabpanel" id="tab-payroll">
     <div id="pay-bar"></div>
     <div class="stats" id="pay-stats"></div>
-    <div class="sec-head"><h2>Part-time payroll</h2><span>Fund 52100 — Gen Ops Contract Payroll · each line shows required, requested, encumbered, paid &amp; forecast together</span></div>
+    <div id="pay-planner"></div>
+    <div class="sec-head"><h2>Part-time payroll</h2><span>Fund 52110 — Gen Ops Contract Payroll · each line shows required, requested, encumbered, paid &amp; forecast together</span></div>
     <div id="pay-tbl"></div>
     <div class="foot" id="pay-foot"></div>
 
@@ -541,7 +554,7 @@ function switchTab(t){
   document.querySelectorAll(".tabpanel").forEach(function(p){ p.classList.toggle("on", p.id==="tab-"+t); });
   if(t==="overview") renderOverview();
   if(t==="operating") renderOperating();
-  if(t==="payroll") renderPayroll();
+  if(t==="payroll"){ renderPayroll(); loadPlannerSummary().then(function(){ if(activeTab==="payroll") renderPayroll(); }); }
   if(t==="licenses") renderLicAll();
   if(t==="summit") renderSummitTab();
 }
@@ -691,7 +704,7 @@ var PAYROLL_WORKSHEET_DEFAULTS = {
 };
 
 /* ============================================================
-   SEED DATA — PAYROLL (Fund 52100)
+   SEED DATA — PAYROLL (Fund 52110)
    ============================================================ */
 var SEED_PAYROLL = [
  {id:"cell-reimb",label:"Cell Phone Reimbursements",required:1440,requiredIsText:false,requested:0,
@@ -967,6 +980,7 @@ function saveAll(){
    separate global forecast-rows table linked by forecastRowId. */
 function normalizePayroll(list, oldForecastRows){
   (list||[]).forEach(function(it){
+    if(it.plannerLink===undefined && PLANNER_GROUP[it.id]) it.plannerLink = PLANNER_GROUP[it.id];
     if(it.forecastCalc===undefined){
       var old = (it.forecastRowId && oldForecastRows) ? oldForecastRows.filter(function(r){return r.id===it.forecastRowId;})[0] : null;
       it.forecastCalc = old ? {weeks:old.weeks,hours:old.hours,rate:old.rate,fringePct:old.fringePct} : null;
@@ -1016,7 +1030,7 @@ function loadAll(){
       }catch(e){}
     }
     budgetItems = normalizeBudget(clone(SEED_BUDGET));
-    payrollItems = clone(SEED_PAYROLL);
+    payrollItems = normalizePayroll(clone(SEED_PAYROLL));
     addlStaff = clone(SEED_ADDL_STAFF);
     licItems = normalizeLic(clone(LIC_SEED));
     baseBudget = clone(BASE_BUDGET_DEFAULT);
@@ -1074,7 +1088,7 @@ var reconFund = null;
 function openReconcile(fundKey){
   reconFund = fundKey;
   var o = overrides[fundKey] || {enc:null,bal:null};
-  var fundLabel = fundKey==="operating" ? "Fund 51161 — Operating" : "Fund 52100 — Payroll";
+  var fundLabel = fundKey==="operating" ? "Fund 51161 — Operating" : "Fund 52110 — Payroll";
   document.getElementById("recon-modal").innerHTML =
     '<button class="x" data-action="recon-close">×</button>'+
     '<h3>Reconcile — '+fundLabel+'</h3>'+
@@ -1129,7 +1143,7 @@ function renderOverview(){
 
   // active items — status (anything with paid or encumbered activity)
   var active = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:"51161", paid:b.paid, encumbered:b.encumbered, status:b.status}; })
-    .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52100", paid:p.paid, encumbered:p.encumbered, status:p.status}; }))
+    .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52110", paid:p.paid, encumbered:p.encumbered, status:p.status}; }))
     .filter(function(x){ return (Number(x.paid)||0)>0 || (Number(x.encumbered)||0)>0; })
     .sort(function(a,b){ return (Number(b.paid)||0)-(Number(a.paid)||0); });
   document.getElementById("ov-active-tbl").innerHTML =
@@ -1142,7 +1156,7 @@ function renderOverview(){
 
   // open encumbrances by vendor
   var encRows = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:"51161", encumbered:b.encumbered}; })
-    .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52100", encumbered:p.encumbered}; }))
+    .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52110", encumbered:p.encumbered}; }))
     .filter(function(x){ return (Number(x.encumbered)||0)>0; })
     .sort(function(a,b){ return (Number(b.encumbered)||0)-(Number(a.encumbered)||0); });
   var encTotal = encRows.reduce(function(a,b){return a+(Number(b.encumbered)||0);},0);
@@ -1164,7 +1178,7 @@ function renderOverview(){
 
   document.getElementById("ov-bottomline").innerHTML =
     '<strong>Bottom line:</strong> Fund 51161 is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered '+
-    '('+money(op.forecast)+' unencumbered forecast still ahead). Fund 52100 is '+pctOf(pay.paid,pay.approved)+' paid with '+money(pay.balance)+' remaining '+
+    '('+money(op.forecast)+' unencumbered forecast still ahead). Fund 52110 is '+pctOf(pay.paid,pay.approved)+' paid with '+money(pay.balance)+' remaining '+
     '('+money(pay.forecast)+' unencumbered forecast still ahead).';
 }
 /* Visual breakdown of Paid vs Encumbered vs Forecast against Approved Budget,
@@ -1452,6 +1466,8 @@ function fcCalcTotal(fc){
   return { amount:round2(amount), fringe:round2(fringe), total:round2(amount+fringe) };
 }
 function itemForecastTotal(it){
+  var pg = plannerGroup(it);
+  if(pg) return Math.max(round2(pg.projected - (Number(it.encumbered)||0)), 0);
   if(it.forecastCalc) return fcCalcTotal(it.forecastCalc).total;
   var req = it.requiredIsText ? 0 : (Number(it.required)||0);
   return Math.max(round2(req - (Number(it.encumbered)||0) - (Number(it.paid)||0)), 0);
@@ -1499,6 +1515,76 @@ function payWorksheetHtml(it){
   }
   return out;
 }
+/* ============================================================
+   CONTRACT PAYROLL PLANNER FEED
+   The Payroll Planner (../payroll-planner/) writes group totals to
+   ucaps_store key "ucaps_payroll_summary_fy27" on every save. Linked
+   lines take their Encumbered figure from it, and their Forecast is
+   the planner's projected cost to 6/30 beyond what's encumbered.
+   ============================================================ */
+var PLANNER_SUMMARY_KEY = "ucaps_payroll_summary_fy27";
+var PLANNER_GROUP = { ambassadors:"seasonal", enforcers:"intern" };
+var PLANNER_GROUP_LABEL = { seasonal:"Contracted Seasonal Employees", intern:"Contracted Student Interns" };
+var plannerSummary = null;
+function loadPlannerSummary(){
+  if(!(window.db && window.db.get)) return Promise.resolve(null);
+  return window.db.get(PLANNER_SUMMARY_KEY).then(function(v){
+    plannerSummary = (v && v.groups) ? v : null;
+    applyPlannerLinks();
+    return plannerSummary;
+  }, function(){ return null; });
+}
+function plannerGroup(it){ return (plannerSummary && it && it.plannerLink) ? (plannerSummary.groups[it.plannerLink]||null) : null; }
+function applyPlannerLinks(){
+  if(!plannerSummary) return;
+  var changed = false;
+  payrollItems.forEach(function(it){
+    var g = plannerGroup(it);
+    if(g && round2(it.encumbered)!==round2(g.encumbered)){ it.encumbered = round2(g.encumbered); changed = true; }
+  });
+  if(changed) saveAll();
+}
+function fmtShortDate(iso){ if(!iso) return ""; var p=iso.slice(0,10).split("-"); return Number(p[1])+"/"+Number(p[2])+"/"+p[0].slice(2); }
+function plannerPanelHtml(){
+  var s = plannerSummary;
+  if(!s) return '<div class="planner-panel"><h3>Contract Payroll Planner</h3>'+
+    '<div class="pp-meta">No planner figures yet. Open the <a href="../payroll-planner/index.html">Contract Payroll Planner</a> once and its numbers will appear here.</div></div>';
+  function f(label,val,color){ return '<div class="fig"><div class="fig-label">'+label+'</div><div class="fig-val mono"'+(color?' style="color:'+color+'"':'')+'>'+money(val)+'</div></div>'; }
+  var payBase = Number(baseBudget.payroll)||0;
+  var html = '<div class="planner-panel">'+
+    '<h3>Fund 52110 contract payroll — from the Payroll Planner</h3>'+
+    '<div class="pp-meta">Paid through '+fmtShortDate(s.paidThrough)+' · planner last saved '+fmtShortDate(s.savedAt)+(s.savedBy?' by '+esc(s.savedBy):'')+' · <a href="../payroll-planner/index.html">Open planner →</a></div>'+
+    '<div class="planner-figs">'+
+      f("Base budget (report)", s.baseBudget)+
+      f("FYTD expended", s.ytdExpended)+
+      f("Encumbered (report)", s.encReport)+
+      f("Balance after encumbrance", s.balEnc, s.balEnc<0?"#b3392f":"#2f7d4f")+
+      f("Projected cost to "+fmtShortDate(s.fyEnd), s.projected)+
+      f("Projected year-end", s.balProj, s.balProj<0?"#b3392f":"#2f7d4f")+
+    '</div>'+
+    '<div class="planner-note">'+(s.balProj<0
+      ? '<b style="color:#b3392f">At the planned hours the fund is '+money(-s.balProj)+' short</b>'+(s.runOut?' and runs out in the pay period ending '+fmtShortDate(s.runOut)+'.':'.')
+      : '<b style="color:#2f7d4f">At the planned hours the fund ends the year '+money(s.balProj)+' under budget.</b>')+'</div>';
+  if(Math.abs(payBase - s.baseBudget) > 0.5){
+    html += '<div class="planner-warn">This tracker\'s payroll base budget ('+money(payBase)+') differs from the encumbrance report\'s '+money(s.baseBudget)+'. '+
+      '<button class="btn tiny" data-action="pay-use-planner-base">Use '+money(s.baseBudget)+'</button></div>';
+  }
+  return html+'</div>';
+}
+function plannerLineHtml(it){
+  var g = plannerGroup(it);
+  if(g){
+    var diff = round2(g.encumbered - g.projected);
+    return '<div class="planner-line">Linked to the Payroll Planner ('+PLANNER_GROUP_LABEL[it.plannerLink]+'): '+
+      '<b>'+g.people+'</b> working · <b>'+g.hrsNow+'</b> hrs/wk now'+(g.hrsNew!==g.hrsNow?' → <b>'+g.hrsNew+'</b> planned':'')+' · '+
+      'projected cost to 6/30 <b>'+money(g.projected)+'</b> vs encumbered <b>'+money(g.encumbered)+'</b>'+
+      (g.release>0.5?' · release <b style="color:#2f7d4f">'+money(g.release)+'</b>':'')+
+      (g.add>0.5?' · add <b style="color:#b3392f">'+money(g.add)+'</b>':'')+
+      (g.unencumbered?' · '+g.unencumbered+' without an encumbrance yet':'')+
+      ' · net '+(diff>=0?'<b style="color:#2f7d4f">'+money(diff)+' spare</b>':'<b style="color:#b3392f">'+money(-diff)+' short</b>')+'</div>';
+  }
+  return '';
+}
 function renderPayroll(){
   var payReq=payRequiredTotal(), payReqAsk=payRequestedTotal();
   var payBase=Number(baseBudget.payroll)||0;
@@ -1506,6 +1592,7 @@ function renderPayroll(){
   var payStats = fundStats(payrollItems, function(p){return p.required;}, payBase, overrides.payroll);
 
   document.getElementById("pay-bar").innerHTML = fundBarHtml(payStats);
+  document.getElementById("pay-planner").innerHTML = plannerPanelHtml();
   document.getElementById("pay-stats").className="stats stats-6";
   document.getElementById("pay-stats").innerHTML=[
     {l:"Required",v:money(payReq),s:"sum of payroll lines",a:"#0a2240"},
@@ -1556,7 +1643,11 @@ function renderPayroll(){
         '<button class="btn tiny danger" style="margin-top:8px;" data-action="fc-remove" data-id="'+it.id+'">Remove forecast worksheet</button>'+
         '</div>';
     }
-    var addFcBtn = (!hasFc) ? ('<button class="detail-toggle" data-action="fc-add" data-id="'+it.id+'">+ Add forecast worksheet</button>') : '';
+    var linked = !!plannerGroup(it);
+    var addFcBtn = (!hasFc && !linked) ? ('<button class="detail-toggle" data-action="fc-add" data-id="'+it.id+'">+ Add forecast worksheet</button>') : '';
+    if(PLANNER_GROUP[it.id]) addFcBtn += it.plannerLink
+      ? '<button class="detail-toggle" data-action="pay-unlink" data-id="'+it.id+'">Enter figures by hand instead of from the planner</button>'
+      : '<button class="detail-toggle" data-action="pay-link" data-id="'+it.id+'">Use Payroll Planner figures</button>';
 
     return '<div class="pay-card" data-pay-id="'+it.id+'">'+
       '<div class="pay-card-hdr">'+
@@ -1569,10 +1660,11 @@ function renderPayroll(){
       '<div class="pay-card-figs">'+
         fig("Required", it.requiredIsText?('<div class="fig-val">'+reqDisplay+'</div>'):('<input class="cell-in num fig-in" type="number" step="0.01" data-field="required" value="'+it.required+'" />'))+
         fig("Requested", '<input class="cell-in num fig-in" type="number" step="0.01" data-field="requested" value="'+it.requested+'" />')+
-        fig("Encumbered", '<input class="cell-in num fig-in" type="number" step="0.01" data-field="encumbered" value="'+(it.encumbered||0)+'" />')+
+        fig("Encumbered", plannerGroup(it) ? ('<div class="fig-val mono">'+money(it.encumbered||0)+'</div><div class="fig-sub">from Payroll Planner</div>') : ('<input class="cell-in num fig-in" type="number" step="0.01" data-field="encumbered" value="'+(it.encumbered||0)+'" />'))+
         fig("Paid", '<input class="cell-in num fig-in" type="number" step="0.01" data-field="paid" value="'+(it.paid||0)+'" />')+
         fig("Forecast", '<div class="fig-val mono" style="color:'+(forecastVal>0?'#9a5b00':'#8b8472')+';">'+money(forecastVal)+'</div>', "fig-computed")+
       '</div>'+
+      plannerLineHtml(it)+
       '<div class="pay-card-actions">'+actions+addFcBtn+'</div>'+
       detailBlock+fcBlock+
       '</div>';
@@ -2088,7 +2180,7 @@ async function exportBudgetExcel(){
   xlMoneyCell(s,opRow,4,op.required); xlMoneyCell(s,opRow,5,opRequested); xlMoneyCell(s,opRow,6,opBase);
   xlMoneyCell(s,opRow,7,op.paid); xlMoneyCell(s,opRow,8,op.calcEnc);
   xlMoneyCell(s,opRow,9,opBase-op.required); xlMoneyCell(s,opRow,10,opBase-op.required-opRequested);
-  s.getCell(payRow,1).value="Payroll"; s.getCell(payRow,2).value=52100; s.getCell(payRow,3).value="Gen Ops Contract Payroll";
+  s.getCell(payRow,1).value="Payroll"; s.getCell(payRow,2).value=52110; s.getCell(payRow,3).value="Gen Ops Contract Payroll";
   xlMoneyCell(s,payRow,4,pay.required); xlMoneyCell(s,payRow,5,payRequested); xlMoneyCell(s,payRow,6,payBase);
   xlMoneyCell(s,payRow,7,pay.paid); xlMoneyCell(s,payRow,8,pay.calcEnc);
   xlMoneyCell(s,payRow,9,payBase-pay.required); xlMoneyCell(s,payRow,10,payBase-pay.required-payRequested);
@@ -2508,7 +2600,7 @@ function buildSupervisorSummaryHtml(){
   var opEncCount = budgetItems.filter(function(b){return (Number(b.encumbered)||0)>0;}).length;
   var opForecastNote = op.forecast>0.01 ? ('An additional '+money(op.forecast)+' remains forecasted but not yet on a PO.') : 'All remaining anticipated spend is already covered by open POs.';
   var lede = 'Fund 51161 is '+pctOf(op.paid,op.approved)+' paid to date'+(opEncCount?(', with '+opEncCount+' vendor'+(opEncCount===1?"":"s")+' carrying open encumbrances totaling '+money(op.encumbered)):'')+'. '+opForecastNote+
-    ' Fund 52100 is '+pctOf(pay.paid,pay.approved)+' paid, with '+money(pay.forecast)+' in remaining staffing forecast against a base budget of '+money(pay.approved)+'.';
+    ' Fund 52110 is '+pctOf(pay.paid,pay.approved)+' paid, with '+money(pay.forecast)+' in remaining staffing forecast against a base budget of '+money(pay.approved)+'.';
 
   var sumItemPaid = payrollItems.reduce(function(a,it){ return a+(Number(it.paid)||0); },0);
   var postingVariance = round2(posted - sumItemPaid);
@@ -2518,7 +2610,7 @@ function buildSupervisorSummaryHtml(){
 
   var opBottom = 'Fund 51161 is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered'+
     (op.forecast>0.01 ? (' ('+money(op.forecast)+' unencumbered forecast still ahead).') : ', with all remaining forecast already covered by POs.');
-  var payBottom = 'Fund 52100 has '+money(pay.balance)+' remaining against a '+money(pay.approved)+' base budget, with '+money(pay.forecast)+' in forecasted staffing costs still ahead.';
+  var payBottom = 'Fund 52110 has '+money(pay.balance)+' remaining against a '+money(pay.approved)+' base budget, with '+money(pay.forecast)+' in forecasted staffing costs still ahead.';
   var bottomLine = opBottom+' '+payBottom+' '+(reconciled?'All figures reconcile to the last Summit import.':'Figures have not yet been reconciled against Summit this cycle.');
 
   return ''+
@@ -2572,7 +2664,7 @@ function buildSupervisorSummaryHtml(){
   '</div>'+
 
   '<div class="ss-fund">'+
-  '<div class="ss-fund-hdr"><h2>Fund 52100 &mdash; Gen Ops Contract Payroll</h2>'+reconTag+'</div>'+
+  '<div class="ss-fund-hdr"><h2>Fund 52110 &mdash; Gen Ops Contract Payroll</h2>'+reconTag+'</div>'+
   ssKpiBlock(pay)+
   '<h3>Active items &mdash; status</h3>'+ssActiveItemsHtml(payItemsForTables)+
   '<h3>Open encumbrances by vendor</h3>'+ssEncumbrancesHtml(payItemsForTables)+
@@ -2647,6 +2739,9 @@ document.addEventListener("click",function(ev){
     else if(act==="draw-remove"){ removeDraw(t.getAttribute("data-drawid")); }
     else if(act==="pay-toggle-forecast"){ openPayForecast[id]=!openPayForecast[id]; renderPayroll(); }
     else if(act==="fc-add"){ fcAdd(id); }
+    else if(act==="pay-link"){ var li=payById(id); if(li){ li.plannerLink=PLANNER_GROUP[id]; applyPlannerLinks(); saveAll(); renderPayroll(); } }
+    else if(act==="pay-unlink"){ var ui=payById(id); if(ui){ ui.plannerLink=null; saveAll(); renderPayroll(); } }
+    else if(act==="pay-use-planner-base"){ if(plannerSummary){ baseBudget.payroll=plannerSummary.baseBudget; saveAll(); renderPayroll(); } }
     else if(act==="fc-remove"){ fcRemove(id); }
     return;
   }
@@ -2715,7 +2810,7 @@ document.addEventListener("keydown",function(ev){ if(ev.key==="Escape"){ if(licE
    ============================================================ */
 document.getElementById("today").textContent=TODAY.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"});
 document.getElementById("lic-sel-status").innerHTML='<option value="All">All</option>'+LIC_STAGES.map(function(s){return '<option value="'+s+'">'+s+'</option>';}).join("");
-loadAll().then(function(){ syncFYInput(); renderOverview(); });
+loadAll().then(function(){ syncFYInput(); renderOverview(); return loadPlannerSummary(); }).then(function(){ renderCurrentTab(); });
 
 </script>
 </body>
