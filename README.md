@@ -23,6 +23,9 @@ ucaps-tools/              ← your GitHub repository root
 ├── license-tracker/
 │   └── index.html        ← License & Maintenance Renewal Tracker
 │
+├── lights-failsafe/
+│   └── index.html        ← Exterior Lights Failsafe Planner (sunrise/sunset → timezone interval)
+│
 ├── payroll-planner/
 │   └── index.html        ← Contract Payroll Planner (fund 52110). Employee data lives
 │                           only in Supabase (ucaps_store key ucaps_payroll_plan_fy27) —
