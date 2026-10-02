@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Exterior Lights Failsafe Planner — UMass Lowell UCAPS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: control strip → recommended panel interval (mirrors the access-control schedule row) → comparison with current setting → day-by-day table with a dusk/dawn bar */
+:root{
+  --bg:#f3f5f7; --surface:#ffffff; --ink:#18202b; --muted:#5d6977; --line:#d9dfe6;
+  --night:#2c3e5c; --nightsoft:#d6deea; --day:#f6e7b8;
+  --sodium:#d9821e; --sodiumink:#9a5410; --sodiumsoft:#fbeed9;
+  --ok:#2f7d4f; --oksoft:#e2f1e7; --bad:#b4372b; --badsoft:#f8e3e0;
+  --display:"Barlow Semi Condensed","Barlow","Arial Narrow",sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10151c; --surface:#18202a; --ink:#e7ebf0; --muted:#97a3b1; --line:#2b3644;
+  --night:#0b1220; --nightsoft:#24324a; --day:#5a4a1c;
+  --sodium:#f0a040; --sodiumink:#f6bd72; --sodiumsoft:#3a2a14;
+  --ok:#6cc58f; --oksoft:#173326; --bad:#ef8577; --badsoft:#3c1d19; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10151c; --surface:#18202a; --ink:#e7ebf0; --muted:#97a3b1; --line:#2b3644;
+  --night:#0b1220; --nightsoft:#24324a; --day:#5a4a1c;
+  --sodium:#f0a040; --sodiumink:#f6bd72; --sodiumsoft:#3a2a14;
+  --ok:#6cc58f; --oksoft:#173326; --bad:#ef8577; --badsoft:#3c1d19; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding-inline:20px;padding-block:28px 48px;display:grid;gap:22px}
+header h1{font-family:var(--display);font-weight:700;font-size:1.9rem;letter-spacing:.01em;margin:0;text-wrap:balance}
+header p{margin:.25rem 0 0;color:var(--muted);max-width:68ch}
+.eyebrow{font-family:var(--display);text-transform:uppercase;letter-spacing:.09em;font-size:.78rem;color:var(--muted);font-weight:600}
+.controls{display:flex;flex-wrap:wrap;gap:14px 18px;align-items:end;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+.field{display:grid;gap:4px;min-width:0}
+.field label{font-size:.8rem;color:var(--muted);font-weight:500}
+input,select{font:inherit;font-family:var(--mono);font-size:.9rem;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 8px}
+input[type=number]{width:5.5rem}
+input[type=time]{width:7.4rem}
+input:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--sodium);outline-offset:2px}
+details.loc{flex-basis:100%;font-size:.85rem;color:var(--muted)}
+details.loc summary{cursor:pointer}
+details.loc .row{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}
+details.loc input{width:8rem}
+
+.rec{background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.rec-head{display:flex;flex-wrap:wrap;gap:8px 20px;justify-content:space-between;align-items:baseline;padding:14px 18px 0}
+.rec-head h2{font-family:var(--display);font-size:1.25rem;margin:0}
+.rec-body{display:grid;grid-template-columns:auto 1fr;gap:18px 28px;padding:16px 18px 18px;align-items:center}
+@media (max-width:720px){.rec-body{grid-template-columns:1fr}}
+.times{display:flex;gap:18px;align-items:end}
+.time-box{display:grid;gap:2px}
+.time-box .lbl{font-size:.78rem;color:var(--muted)}
+.time-box .val{font-family:var(--mono);font-weight:600;font-size:2.3rem;line-height:1;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.time-box .sub{font-size:.78rem;color:var(--muted);font-family:var(--mono)}
+.arrow{color:var(--muted);font-size:1.4rem;padding-bottom:12px}
+.panelrow{overflow-x:auto;min-width:0}
+.panelrow table{border-collapse:collapse;font-size:.78rem;font-family:var(--body)}
+.panelrow th{font-weight:500;color:var(--muted);padding:2px 6px;text-align:center}
+.panelrow td{padding:3px 6px;text-align:center}
+.panelrow .tv{font-family:var(--mono);border:1px solid var(--line);border-radius:3px;padding:2px 6px;background:var(--bg)}
+.cb{display:inline-block;width:13px;height:13px;border:1px solid var(--muted);border-radius:2px;vertical-align:middle}
+.cb.on{background:var(--sodium);border-color:var(--sodium);position:relative}
+.cb.on::after{content:"";position:absolute;left:3.5px;top:0.5px;width:4px;height:8px;border:solid var(--surface);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.rec-foot{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;padding:12px 18px;border-top:1px solid var(--line);background:var(--bg);font-size:.88rem;color:var(--muted)}
+button{font:inherit;font-weight:600;border:1px solid var(--sodium);background:var(--sodium);color:#1b1206;border-radius:5px;padding:6px 14px;cursor:pointer}
+button.ghost{background:transparent;color:var(--sodiumink)}
+.note{padding:10px 14px;border-radius:6px;font-size:.9rem}
+.note.warn{background:var(--sodiumsoft);color:var(--ink);border-left:3px solid var(--sodium)}
+
+.compare{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:8px;align-content:start}
+.card h3{font-family:var(--display);font-size:1.05rem;margin:0}
+.pill{display:inline-block;font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:99px}
+.pill.ok{background:var(--oksoft);color:var(--ok)} .pill.bad{background:var(--badsoft);color:var(--bad)}
+.card p{margin:0;font-size:.9rem;color:var(--muted)}
+.card p b{color:var(--ink);font-family:var(--mono);font-weight:600}
+
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px}
+table.days{width:100%;border-collapse:collapse;font-size:.88rem;min-width:760px}
+table.days th{font-family:var(--display);text-transform:uppercase;letter-spacing:.06em;font-size:.72rem;color:var(--muted);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);font-weight:600;white-space:nowrap}
+table.days td{padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+table.days tr:last-child td{border-bottom:0}
+table.days td.m{font-family:var(--mono)}
+table.days tr.wknd td:first-child{color:var(--muted)}
+td.bind{color:var(--sodiumink);font-weight:600}
+td.bind::after{content:" ◆";font-size:.65rem}
+.bar{position:relative;width:240px;height:14px;border-radius:3px;background:var(--night);overflow:hidden}
+.bar .d{position:absolute;top:0;bottom:0;background:var(--day)}
+.bar .z{position:absolute;top:5px;height:4px;background:var(--sodium);border-radius:2px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.8rem;color:var(--muted);padding:10px 12px;border-top:1px solid var(--line)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:10px;border-radius:2px;display:inline-block}
+footer{font-size:.8rem;color:var(--muted);max-width:75ch}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script src="../ucaps_shared.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><a href="../index.html" style="color:inherit;text-decoration:none">← UCAPS Tools</a> · Integrated Security</div>
+    <h1>Exterior Lights Failsafe Planner</h1>
+    <p>Sunrise and sunset for UMass Lowell over the coming weeks, and the timezone interval to enter for “Auto Campus Exterior Lights.” Lights are on whenever the timezone is inactive.</p>
+  </header>
+
+  <section class="controls" aria-label="Settings">
+    <div class="field"><label for="start">Start date</label><input type="date" id="start"></div>
+    <div class="field"><label for="span">Look ahead</label>
+      <select id="span"><option value="7">1 week</option><option value="14" selected>2 weeks</option><option value="21">3 weeks</option><option value="28">4 weeks</option></select></div>
+    <div class="field"><label for="offR">Start after sunrise (min)</label><input type="number" id="offR" value="15" step="1"></div>
+    <div class="field"><label for="offS">End after sunset (min)</label><input type="number" id="offS" value="15" step="1"></div>
+    <div class="field"><label for="round">Round to</label>
+      <select id="round"><option value="1">1 min</option><option value="5" selected>5 min</option><option value="15">15 min</option></select></div>
+    <details class="loc"><summary>Location: <span id="locLabel">UMass Lowell (42.6526, −71.3247) · America/New_York</span></summary>
+      <div class="row">
+        <div class="field"><label for="lat">Latitude</label><input type="number" id="lat" value="42.6526" step="0.0001"></div>
+        <div class="field"><label for="lon">Longitude</label><input type="number" id="lon" value="-71.3247" step="0.0001"></div>
+      </div>
+    </details>
+  </section>
+
+  <section class="rec" aria-labelledby="recTitle">
+    <div class="rec-head">
+      <h2 id="recTitle">Recommended interval</h2>
+      <span class="eyebrow" id="recRange"></span>
+    </div>
+    <div class="rec-body">
+      <div class="times">
+        <div class="time-box"><span class="lbl">Start · lights off</span><span class="val" id="recStart">--:--</span><span class="sub" id="recStartWhy"></span></div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="time-box"><span class="lbl">End · lights on</span><span class="val" id="recEnd">--:--</span><span class="sub" id="recEndWhy"></span></div>
+      </div>
+      <div class="panelrow" aria-label="How the row looks in the schedule editor">
+        <table>
+          <thead><tr><th></th><th>Start</th><th>End</th><th>Sun</th><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>H1</th><th>H2</th><th>H3</th></tr></thead>
+          <tbody><tr><td>2.</td><td><span class="tv" id="pvStart">--:--</span></td><td><span class="tv" id="pvEnd">--:--</span></td>
+            <td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb on"></i></td><td><i class="cb"></i></td><td><i class="cb"></i></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="rec-foot">
+      <button id="copyBtn" type="button">Copy times</button>
+      <span id="copyMsg" role="status"></span>
+      <span>One interval covers the whole window: it uses the latest sunrise and earliest sunset, so lights never sit off after dark. Start rounds up, end rounds down.</span>
+    </div>
+  </section>
+
+  <div id="dstNote" class="note warn" hidden></div>
+
+  <section class="compare" aria-label="Current setting check">
+    <div class="card">
+      <h3>Currently in the panel</h3>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div class="field"><label for="curS">Start</label><input type="time" id="curS" value="07:15"></div>
+        <div class="field"><label for="curE">End</label><input type="time" id="curE" value="20:45"></div>
+      </div>
+      <p>Defaults to interval 2 from your screenshot. Edit to match what's set now.</p>
+    </div>
+    <div class="card" id="morningCard"></div>
+    <div class="card" id="eveningCard"></div>
+  </section>
+
+  <section aria-labelledby="dayTitle" style="display:grid;gap:10px">
+    <h2 id="dayTitle" class="eyebrow" style="margin:0">Day by day</h2>
+    <div class="tablewrap">
+      <table class="days">
+        <thead><tr><th>Date</th><th>Sunrise</th><th>Sunset</th><th>Daylight</th><th>Zone start</th><th>Zone end</th><th>05:00 – 21:00</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="legend">
+        <span><i class="sw" style="background:var(--day)"></i>Daylight</span>
+        <span><i class="sw" style="background:var(--night)"></i>Dark</span>
+        <span><i class="sw" style="background:var(--sodium)"></i>Recommended zone active (lights off)</span>
+        <span>◆ Day that sets the recommended time</span>
+      </div>
+    </div>
+  </section>
+
+  <footer>Times are calculated with the NOAA solar position method (sun's upper edge at the horizon, standard refraction) and are typically within a minute or two of published tables. Clock times are Eastern, with daylight saving applied automatically.</footer>
+</div>
+
+<script>
+const TZ = "America/New_York";
+const rad = Math.PI/180, dayMs = 864e5, J1970 = 2440588, J2000 = 2451545, J0 = 0.0009, obl = rad*23.4397;
+const toDays = d => d/dayMs - 0.5 + J1970 - J2000;
+const fromJ = j => (j + 0.5 - J1970)*dayMs;
+function sunTimes(ms, lat, lng){
+  const lw = rad*-lng, phi = rad*lat, d = toDays(ms);
+  const n = Math.round(d - J0 - lw/(2*Math.PI));
+  const ds = J0 + lw/(2*Math.PI) + n;
+  const M = rad*(357.5291 + 0.98560028*ds);
+  const C = rad*(1.9148*Math.sin(M) + 0.02*Math.sin(2*M) + 0.0003*Math.sin(3*M));
+  const L = M + C + rad*102.9372 + Math.PI;
+  const dec = Math.asin(Math.sin(obl)*Math.sin(L));
+  const Jnoon = J2000 + ds + 0.0053*Math.sin(M) - 0.0069*Math.sin(2*L);
+  const h = -0.833*rad;
+  const w = Math.acos((Math.sin(h) - Math.sin(phi)*Math.sin(dec))/(Math.cos(phi)*Math.cos(dec)));
+  const a = J0 + (w + lw)/(2*Math.PI) + n;
+  const Jset = J2000 + a + 0.0053*Math.sin(M) - 0.0069*Math.sin(2*L);
+  const Jrise = Jnoon - (Jset - Jnoon);
+  return {rise: fromJ(Jrise), set: fromJ(Jset)};
+}
+const partsFmt = new Intl.DateTimeFormat("en-US",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23",timeZoneName:"short"});
+function localParts(ms){
+  const o = {}; for (const p of partsFmt.formatToParts(new Date(ms))) o[p.type] = p.value;
+  return {y:+o.year, m:+o.month, d:+o.day, min:(+o.hour)*60 + (+o.minute) + (+o.second)/60, tz:o.timeZoneName};
+}
+const hhmm = m => { m = ((Math.round(m)%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); };
+const dur = m => { m = Math.round(Math.abs(m)); const h = Math.floor(m/60), r = m%60; return (h? h+"h ":"") + r + "m"; };
+const toMin = s => { const [h,m] = s.split(":").map(Number); return h*60+m; };
+const dayName = new Intl.DateTimeFormat("en-US",{weekday:"short",month:"short",day:"numeric",timeZone:"UTC"});
+const $ = id => document.getElementById(id);
+
+// default start = today in Eastern
+(() => { const p = localParts(Date.now()); $("start").value = `${p.y}-${String(p.m).padStart(2,"0")}-${String(p.d).padStart(2,"0")}`; })();
+
+let rec = {start:"", end:""};
+function render(){
+  const [y,mo,da] = $("start").value.split("-").map(Number);
+  if (!y) return;
+  const span = +$("span").value, offR = +$("offR").value || 0, offS = +$("offS").value || 0, rnd = +$("round").value;
+  const lat = +$("lat").value, lon = +$("lon").value;
+  $("locLabel").textContent = (Math.abs(lat-42.6526)<1e-4 && Math.abs(lon+71.3247)<1e-4 ? "UMass Lowell " : "Custom ") + `(${lat.toFixed(4)}, ${lon.toFixed(4).replace("-","−")}) · ${TZ}`;
+  const days = [];
+  for (let i=0;i<span;i++){
+    const noonUTC = Date.UTC(y, mo-1, da+i, 17);
+    const t = sunTimes(noonUTC, lat, lon);
+    const r = localParts(t.rise), s = localParts(t.set);
+    days.push({date:new Date(Date.UTC(y,mo-1,da+i)), rise:r.min, set:s.min, tz:r.tz, zs:r.min+offR, ze:s.min+offS});
+  }
+  const latest = days.reduce((a,b)=> b.zs>a.zs?b:a), earliest = days.reduce((a,b)=> b.ze<a.ze?b:a);
+  const recS = Math.ceil(latest.zs/rnd)*rnd, recE = Math.floor(earliest.ze/rnd)*rnd;
+  rec = {start:hhmm(recS), end:hhmm(recE)};
+  $("recStart").textContent = $("pvStart").textContent = rec.start;
+  $("recEnd").textContent = $("pvEnd").textContent = rec.end;
+  $("recStartWhy").textContent = `sunrise ${hhmm(latest.rise)} on ${dayName.format(latest.date)}`;
+  $("recEndWhy").textContent = `sunset ${hhmm(earliest.set)} on ${dayName.format(earliest.date)}`;
+  $("recRange").textContent = `${dayName.format(days[0].date)} – ${dayName.format(days[days.length-1].date)}`;
+
+  // DST
+  const zones = [...new Set(days.map(d=>d.tz))];
+  const dn = $("dstNote");
+  if (zones.length > 1){
+    const sw = days.find((d,i)=> i>0 && d.tz!==days[i-1].tz);
+    dn.hidden = false;
+    dn.textContent = `Clocks change on ${dayName.format(sw.date)} (${days[0].tz} → ${sw.tz}). Sunrise and sunset jump by about an hour that day, so this single interval is very conservative. Consider planning the weeks before and after the change separately.`;
+  } else dn.hidden = true;
+
+  // current-setting check
+  const cS = toMin($("curS").value || "00:00"), cE = toMin($("curE").value || "00:00");
+  let worstAM = null, worstPM = null;
+  for (const d of days){
+    const am = d.rise - cS;    // lights off before sunrise
+    const pm = cE - d.set;     // lights still off after sunset
+    if (!worstAM || am > worstAM.v) worstAM = {v:am, d};
+    if (!worstPM || pm > worstPM.v) worstPM = {v:pm, d};
+  }
+  $("morningCard").innerHTML = worstAM.v > 0
+    ? `<h3>Morning <span class="pill bad">Dark gap</span></h3><p>Lights shut off at <b>${hhmm(cS)}</b>, up to <b>${dur(worstAM.v)}</b> before sunrise (${hhmm(worstAM.d.rise)} on ${dayName.format(worstAM.d.date)}).</p>`
+    : `<h3>Morning <span class="pill ok">Covered</span></h3><p>Lights stay on until <b>${hhmm(cS)}</b>, at least <b>${dur(-worstAM.v)}</b> after every sunrise in this window.</p>`;
+  $("eveningCard").innerHTML = worstPM.v > 0
+    ? `<h3>Evening <span class="pill bad">Dark gap</span></h3><p>Lights don't come on until <b>${hhmm(cE)}</b>, up to <b>${dur(worstPM.v)}</b> after sunset (${hhmm(worstPM.d.set)} on ${dayName.format(worstPM.d.date)}).</p>`
+    : `<h3>Evening <span class="pill ok">Covered</span></h3><p>Lights come on at <b>${hhmm(cE)}</b>, at or before every sunset in this window.</p>`;
+
+  // rows
+  const W0 = 300, W1 = 1260, pct = m => Math.max(0, Math.min(100, (m - W0)/(W1-W0)*100));
+  $("rows").innerHTML = days.map(d => {
+    const wk = d.date.getUTCDay(); const wknd = wk===0||wk===6;
+    return `<tr class="${wknd?"wknd":""}">
+      <td>${dayName.format(d.date)}</td>
+      <td class="m">${hhmm(d.rise)}</td><td class="m">${hhmm(d.set)}</td>
+      <td class="m">${dur(d.set-d.rise)}</td>
+      <td class="m ${d===latest?"bind":""}">${hhmm(d.zs)}</td>
+      <td class="m ${d===earliest?"bind":""}">${hhmm(d.ze)}</td>
+      <td><div class="bar" title="Daylight ${hhmm(d.rise)}–${hhmm(d.set)} · zone ${rec.start}–${rec.end}">
+        <span class="d" style="left:${pct(d.rise)}%;width:${pct(d.set)-pct(d.rise)}%"></span>
+        <span class="z" style="left:${pct(recS)}%;width:${pct(recE)-pct(recS)}%"></span></div></td></tr>`;
+  }).join("");
+}
+for (const id of ["start","span","offR","offS","round","lat","lon","curS","curE"]) $(id).addEventListener("input", render);
+$("copyBtn").addEventListener("click", () => {
+  const txt = `Start ${rec.start}  End ${rec.end}`;
+  const msg = $("copyMsg");
+  navigator.clipboard.writeText(txt).then(()=> msg.textContent = "Copied", ()=> msg.textContent = txt).finally(()=> setTimeout(()=> msg.textContent="", 2500));
+});
+render();
+if (typeof ucapsGate === 'function') ucapsGate();
+</script>
+</body>
+</html>
