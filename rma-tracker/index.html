@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS RMA Tracker</title>
+<script src="../ucaps_shared.js"></script>
+<style>
+  :root{
+    --navy:#1b2a4a;
+    --navy-light:#25396b;
+    --blue:#2f6fed;
+    --blue-dim:#e8f0fe;
+    --slate:#5b6472;
+    --slate-light:#8892a0;
+    --bg:#f3f5f8;
+    --panel:#ffffff;
+    --border:#e1e5eb;
+    --amber:#b7791f;
+    --amber-bg:#fdf3e0;
+    --green:#1f8a5f;
+    --green-bg:#e5f6ee;
+    --red:#c0392b;
+    --red-bg:#fbe9e7;
+    --radius:8px;
+    font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Segoe UI", -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    background:var(--bg);
+    color:#1c2331;
+  }
+  header{
+    background:var(--navy);
+    color:#fff;
+    padding:16px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+  }
+  header .brand{display:flex;align-items:center;gap:12px;}
+  header .brand .mark{
+    width:36px;height:36px;border-radius:8px;background:var(--blue);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;
+  }
+  header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.2px;}
+  header .sub{font-size:12px;color:#aeb9d4;margin-top:2px;}
+  nav{
+    display:flex;gap:4px;background:var(--navy-light);padding:0 20px;flex-wrap:wrap;
+  }
+  nav button{
+    background:none;border:none;color:#c7d0e6;padding:12px 16px;font-size:13.5px;
+    cursor:pointer;border-bottom:3px solid transparent;font-weight:500;
+  }
+  nav button:hover{color:#fff;}
+  nav button.active{color:#fff;border-bottom-color:var(--blue);}
+  main{padding:22px 24px 60px;max-width:1400px;margin:0 auto;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+  .card .num{font-size:26px;font-weight:700;color:var(--navy);}
+  .card .lbl{font-size:12.5px;color:var(--slate);margin-top:2px;}
+  .card.warn .num{color:var(--amber);}
+  .card.bad .num{color:var(--red);}
+  .card.good .num{color:var(--green);}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;}
+  .panel h2{margin:0 0 14px;font-size:15px;color:var(--navy);}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .toolbar input[type=text], .toolbar select{
+    padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13.5px;background:#fff;
+  }
+  .toolbar input[type=text]{flex:1;min-width:180px;}
+  .spacer{flex:1;}
+
+  button.btn{
+    background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:6px;
+    font-size:13.5px;font-weight:600;cursor:pointer;
+  }
+  button.btn:hover{background:#245bcf;}
+  button.btn.secondary{background:#fff;color:var(--navy);border:1px solid var(--border);}
+  button.btn.secondary:hover{background:#f2f4f7;}
+  button.btn.danger{background:#fff;color:var(--red);border:1px solid #f0c9c3;}
+  button.btn.danger:hover{background:var(--red-bg);}
+  button.btn.small{padding:5px 10px;font-size:12px;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{
+    text-align:left;padding:10px 10px;background:#f7f8fa;color:var(--slate);
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);
+    cursor:pointer;white-space:nowrap;
+  }
+  th:hover{color:var(--navy);}
+  td{padding:10px 10px;border-bottom:1px solid #eef0f3;vertical-align:top;}
+  tr:hover td{background:#fafbfd;}
+  .row-actions{display:flex;gap:6px;}
+
+  .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px;}
+  .badge.pending{background:var(--amber-bg);color:var(--amber);}
+  .badge.shipped{background:var(--blue-dim);color:var(--blue);}
+  .badge.received{background:var(--green-bg);color:var(--green);}
+  .badge.overdue{background:var(--red-bg);color:var(--red);}
+
+  .empty{padding:40px 20px;text-align:center;color:var(--slate-light);}
+  .empty .big{font-size:32px;margin-bottom:8px;}
+
+  /* modal */
+  .modal-bg{
+    display:none;position:fixed;inset:0;background:rgba(15,22,40,.5);
+    align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50;
+  }
+  .modal-bg.active{display:flex;}
+  .modal{background:#fff;border-radius:10px;max-width:720px;width:100%;padding:24px 26px 26px;}
+  .modal h2{margin:0 0 4px;font-size:17px;color:var(--navy);}
+  .modal .modal-sub{font-size:12.5px;color:var(--slate);margin-bottom:16px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid .full{grid-column:1/-1;}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:4px;}
+  .field input, .field select, .field textarea{
+    width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13.5px;font-family:inherit;
+  }
+  .field textarea{resize:vertical;min-height:56px;}
+  .checkline{display:flex;align-items:center;gap:8px;margin-top:6px;}
+  .checkline input{width:auto;}
+  .modal-footer{display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);}
+  fieldset{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin:14px 0 0;grid-column:1/-1;}
+  legend{font-size:12px;font-weight:700;color:var(--navy);padding:0 6px;}
+
+  /* company directory */
+  .company-item{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px;display:flex;justify-content:space-between;gap:10px;}
+  .company-item .details{font-size:12.5px;color:var(--slate);line-height:1.5;}
+  .company-item .name{font-weight:700;color:var(--navy);font-size:14px;margin-bottom:2px;}
+
+  footer.appfoot{text-align:center;color:var(--slate-light);font-size:11.5px;padding:20px;}
+
+  /* print form */
+  #printForm{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printForm, #printForm *{visibility:visible;}
+    #printForm{display:block;position:absolute;top:0;left:0;width:100%;padding:30px;}
+  }
+  .pf-title{font-size:16px;font-weight:700;text-align:center;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:16px;}
+  .pf-cols{display:flex;gap:24px;}
+  .pf-col{flex:1;}
+  .pf-col h3{font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #000;padding-bottom:4px;margin-bottom:8px;}
+  .pf-row{font-size:13px;margin-bottom:6px;}
+  .pf-row b{display:inline-block;min-width:120px;}
+  .pf-section{margin-top:18px;}
+  .pf-check{margin:4px 0;font-size:13px;}
+  .pf-box{display:inline-block;width:13px;height:13px;border:1px solid #000;margin-right:6px;text-align:center;line-height:13px;font-size:11px;}
+
+  .toast{
+    position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:11px 18px;
+    border-radius:8px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(10px);
+    transition:.25s;pointer-events:none;z-index:100;
+  }
+  .toast.show{opacity:1;transform:translateY(0);}
+
+  select#carrier{min-width:110px;}
+  .hint{font-size:11.5px;color:var(--slate-light);margin-top:8px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">RMA</div>
+    <div>
+      <h1>UCAPS RMA Tracker</h1>
+      <div class="sub">UCard, Access &amp; Parking Services — Equipment Returns</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <span id="whoami" style="font-size:12px;color:#aeb9d4;"></span>
+    <button class="btn secondary" onclick="exportJSON()">Export backup</button>
+    <label class="btn secondary" style="cursor:pointer;">
+      Import backup
+      <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importJSON(event)">
+    </label>
+  </div>
+</header>
+
+<nav>
+  <button class="active" data-view="dashboard" onclick="switchView('dashboard')">Dashboard</button>
+  <button data-view="rmas" onclick="switchView('rmas')">RMAs</button>
+  <button data-view="companies" onclick="switchView('companies')">Company Directory</button>
+  <button data-view="settings" onclick="switchView('settings')">Settings</button>
+</nav>
+
+<main>
+
+  <!-- DASHBOARD -->
+  <div class="view active" id="view-dashboard">
+    <div class="cards" id="dashCards"></div>
+    <div class="panel">
+      <h2>Needs attention</h2>
+      <table>
+        <thead><tr><th>Equipment</th><th>Company</th><th>RMA#</th><th>Status</th><th>Shipped</th><th>Days out</th><th></th></tr></thead>
+        <tbody id="dashTable"></tbody>
+      </table>
+      <div class="empty" id="dashEmpty" style="display:none;">
+        <div class="big">✓</div>
+        Nothing outstanding. All shipped RMAs have been marked received.
+      </div>
+    </div>
+  </div>
+
+  <!-- RMAS -->
+  <div class="view" id="view-rmas">
+    <div class="panel">
+      <div class="toolbar">
+        <input type="text" id="searchBox" placeholder="Search equipment, serial, company, RMA#, tracking..." oninput="renderRmaTable()">
+        <select id="filterStatus" onchange="renderRmaTable()">
+          <option value="">All statuses</option>
+          <option value="Pending">Pending</option>
+          <option value="Shipped">Shipped</option>
+          <option value="Received">Received</option>
+        </select>
+        <div class="spacer"></div>
+        <button class="btn" onclick="openRmaModal()">+ New RMA</button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sortBy('equipment')">Equipment</th>
+            <th onclick="sortBy('serialNumber')">Serial #</th>
+            <th onclick="sortBy('company')">Company</th>
+            <th onclick="sortBy('rmaNumber')">RMA #</th>
+            <th onclick="sortBy('status')">Status</th>
+            <th onclick="sortBy('dateShipped')">Shipped</th>
+            <th>Carrier / Tracking</th>
+            <th onclick="sortBy('ticketNumber')">Ticket #</th>
+            <th style="text-align:right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rmaTableBody"></tbody>
+      </table>
+      <div class="empty" id="rmaEmpty" style="display:none;">
+        <div class="big">📦</div>
+        No RMAs yet. Click "New RMA" to log your first equipment return.
+      </div>
+    </div>
+  </div>
+
+  <!-- COMPANIES -->
+  <div class="view" id="view-companies">
+    <div class="panel">
+      <div class="toolbar">
+        <div style="font-size:13px;color:var(--slate);">Saved vendor RMA addresses — auto-fill the shipping form and RMA entries.</div>
+        <div class="spacer"></div>
+        <button class="btn" onclick="openCompanyModal()">+ Add company</button>
+      </div>
+      <div id="companyList"></div>
+      <div class="empty" id="companyEmpty" style="display:none;">
+        <div class="big">🏢</div>
+        No saved companies yet. Add a vendor's RMA return address to reuse it on every shipment.
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="view" id="view-settings">
+    <div class="panel" style="max-width:560px;">
+      <h2>Return / "From" address</h2>
+      <div class="hint" style="margin-top:-8px;margin-bottom:14px;">Printed on every Parcel Delivery Request form as the sender.</div>
+      <div class="form-grid">
+        <div class="field full"><label>Name</label><input type="text" id="setFromName"></div>
+        <div class="field full"><label>Street address</label><input type="text" id="setFromStreet"></div>
+        <div class="field"><label>City / State / Zip</label><input type="text" id="setFromCityZip"></div>
+        <div class="field"><label>Phone / Extension</label><input type="text" id="setFromPhone"></div>
+      </div>
+      <div style="margin-top:16px;">
+        <button class="btn" onclick="saveSettings()">Save settings</button>
+      </div>
+    </div>
+    <div class="panel" style="max-width:560px;">
+      <h2>Data</h2>
+      <div class="hint" style="margin-top:-8px;">RMAs, companies and settings are saved to shared UCAPS storage and sync across your devices. Export a backup occasionally as a local copy.</div>
+      <div style="margin-top:14px;display:flex;gap:10px;">
+        <button class="btn secondary" onclick="exportJSON()">Export backup (.json)</button>
+        <button class="btn danger" onclick="wipeAll()">Clear all data</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="appfoot">UCAPS RMA Tracker — data syncs across your devices via shared UCAPS storage. Export a backup periodically.</footer>
+
+<!-- RMA MODAL -->
+<div class="modal-bg" id="rmaModalBg">
+  <div class="modal">
+    <h2 id="rmaModalTitle">New RMA</h2>
+    <div class="modal-sub">Track an outgoing equipment return.</div>
+    <div class="form-grid">
+      <div class="field"><label>Equipment</label><input type="text" id="f_equipment" placeholder="e.g. TouchNet Card Reader"></div>
+      <div class="field"><label>Serial number</label><input type="text" id="f_serial"></div>
+
+      <div class="field">
+        <label>Company</label>
+        <select id="f_company" onchange="onCompanySelect()"></select>
+      </div>
+      <div class="field"><label>RMA #</label><input type="text" id="f_rmaNumber"></div>
+
+      <div class="field">
+        <label>Status</label>
+        <select id="f_status">
+          <option>Pending</option>
+          <option>Shipped</option>
+          <option>Received</option>
+        </select>
+      </div>
+      <div class="field"><label>Ticket #</label><input type="text" id="f_ticket"></div>
+
+      <div class="field"><label>Date shipped</label><input type="date" id="f_dateShipped"></div>
+      <div class="field">
+        <label>Carrier</label>
+        <select id="carrier">
+          <option value="">—</option>
+          <option>UPS</option>
+          <option>FedEx</option>
+          <option>USPS</option>
+          <option>DHL</option>
+          <option>Other</option>
+        </select>
+      </div>
+
+      <div class="field full"><label>Tracking number</label><input type="text" id="f_tracking"></div>
+
+      <div class="field">
+        <label>Replacement received?</label>
+        <select id="f_received" onchange="toggleReceivedDate()">
+          <option value="No">No</option>
+          <option value="Yes">Yes</option>
+        </select>
+      </div>
+      <div class="field" id="f_dateReceivedWrap" style="display:none;">
+        <label>Date received</label><input type="date" id="f_dateReceived">
+      </div>
+
+      <div class="field full"><label>Notes</label><textarea id="f_notes"></textarea></div>
+
+      <fieldset>
+        <legend>Shipping form details (for the Parcel Delivery Request)</legend>
+        <div class="form-grid">
+          <div class="field">
+            <label>Delivery commitment</label>
+            <select id="f_delivery">
+              <option>1-5 Business Days (Ground)</option>
+              <option>3 Business Days</option>
+              <option>2 Business Days</option>
+              <option>Next Day/Overnight</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Insurance amount (optional)</label>
+            <input type="text" id="f_insurance" placeholder="leave blank if none">
+          </div>
+          <div class="field full">
+            <div class="checkline"><input type="checkbox" id="f_trackingRequested" checked> <label style="margin:0;">Request tracking number confirmation email</label></div>
+          </div>
+        </div>
+      </fieldset>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn danger" id="deleteBtn" style="display:none;" onclick="deleteCurrentRma()">Delete RMA</button>
+      <div style="display:flex;gap:10px;margin-left:auto;">
+        <button class="btn secondary" onclick="closeRmaModal()">Cancel</button>
+        <button class="btn secondary" onclick="saveRma(true)">Save &amp; print shipping form</button>
+        <button class="btn" onclick="saveRma(false)">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPANY MODAL -->
+<div class="modal-bg" id="companyModalBg">
+  <div class="modal" style="max-width:480px;">
+    <h2 id="companyModalTitle">Add company</h2>
+    <div class="modal-sub">Vendor return-shipping address, used to auto-fill RMAs and the shipping form.</div>
+    <div class="form-grid">
+      <div class="field full"><label>Company name</label><input type="text" id="c_name"></div>
+      <div class="field full"><label>Street address</label><input type="text" id="c_street"></div>
+      <div class="field"><label>City / State / Zip</label><input type="text" id="c_cityzip"></div>
+      <div class="field"><label>Phone (optional)</label><input type="text" id="c_phone"></div>
+      <div class="field full"><label>Notes</label><textarea id="c_notes"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn danger" id="companyDeleteBtn" style="display:none;" onclick="deleteCurrentCompany()">Delete</button>
+      <div style="display:flex;gap:10px;margin-left:auto;">
+        <button class="btn secondary" onclick="closeCompanyModal()">Cancel</button>
+        <button class="btn" onclick="saveCompany()">Save company</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PRINTABLE FORM -->
+<div id="printForm">
+  <div class="pf-title">UCard, Access and Parking Services<br>Parcel Delivery Request Form</div>
+  <div class="pf-cols">
+    <div class="pf-col">
+      <h3>From / Return Address</h3>
+      <div class="pf-row"><b>Name:</b> <span id="pf_fromName"></span></div>
+      <div class="pf-row"><b>Street Address:</b> <span id="pf_fromStreet"></span></div>
+      <div class="pf-row"><b>City/State/Zip:</b> <span id="pf_fromCityZip"></span></div>
+      <div class="pf-row"><b>Phone Extension:</b> <span id="pf_fromPhone"></span></div>
+    </div>
+    <div class="pf-col">
+      <h3>To</h3>
+      <div class="pf-row"><b>Name (optional):</b> RMA # <span id="pf_rmaNumber"></span></div>
+      <div class="pf-row"><b>Company:</b> <span id="pf_toCompany"></span></div>
+      <div class="pf-row"><b>Street Address:</b> <span id="pf_toStreet"></span></div>
+      <div class="pf-row"><b>City/State/Zip:</b> <span id="pf_toCityZip"></span></div>
+      <div class="pf-row"><b>Phone (optional):</b> <span id="pf_toPhone"></span></div>
+    </div>
+  </div>
+
+  <div class="pf-section">
+    <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #000;padding-bottom:4px;">Shipping Details</h3>
+    <div style="margin-top:8px;font-weight:700;font-size:12.5px;">Delivery Commitment (choose only one):</div>
+    <div class="pf-check"><span class="pf-box" id="chk_overnight"></span>Next Day/Overnight</div>
+    <div class="pf-check"><span class="pf-box" id="chk_2day"></span>2 Business Days</div>
+    <div class="pf-check"><span class="pf-box" id="chk_3day"></span>3 Business Days</div>
+    <div class="pf-check"><span class="pf-box" id="chk_ground"></span>1-5 Business Days (Ground)</div>
+
+    <div style="margin-top:12px;font-weight:700;font-size:12.5px;">Value-Added Services (choose all that apply):</div>
+    <div class="pf-check"><span class="pf-box" id="chk_tracking"></span>Tracking Number Requested: <span id="pf_email"></span></div>
+    <div class="pf-check"><span class="pf-box" id="chk_insurance"></span>Insurance (Amount: <span id="pf_insurance"></span>)</div>
+  </div>
+
+  <div class="pf-section">
+    <h3 style="font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #000;padding-bottom:4px;">Verification</h3>
+    <div class="pf-row" style="margin-top:8px;"><b>Date Prepared:</b> <span id="pf_datePrepared"></span> &nbsp;&nbsp;&nbsp; <b>Signature:</b> ______________________________</div>
+    <div class="pf-row"><b>Notes:</b> <span id="pf_notes"></span></div>
+    <div class="pf-row" style="margin-top:10px;color:#444;font-size:11.5px;">Equipment: <span id="pf_equipment"></span> &nbsp;|&nbsp; Serial #: <span id="pf_serial"></span> &nbsp;|&nbsp; Ticket #: <span id="pf_ticket"></span></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- hosted-site wiring: sign-in gate + Supabase-backed shared storage ---------- */
+if (typeof ucapsGate === "function") ucapsGate();
+document.addEventListener('ucaps:signedin', function(e){
+  var who = document.getElementById('whoami');
+  if(who && e.detail) who.textContent = e.detail.name || e.detail.email || '';
+});
+function storageSet(k,v){
+  if(window.db && window.db.set){
+    var obj; try{ obj = JSON.parse(v); }catch(e){ obj = v; }
+    return window.db.set(k, obj).then(function(){return true;},function(){return false;});
+  }
+  return new Promise(function(res){ try{ localStorage.setItem(k,v); res(true);}catch(e){ res(false);} });
+}
+function storageGet(k){
+  if(window.db && window.db.get){
+    return window.db.get(k).then(function(val){
+      if(val==null) return null;
+      return (typeof val==="string") ? val : JSON.stringify(val);
+    },function(){ return null; });
+  }
+  return new Promise(function(res){ try{ res(localStorage.getItem(k)); }catch(e){ res(null);} });
+}
+
+/* ---------- data ---------- */
+const STORAGE_KEY = 'ucaps-rma-tracker-v1';
+function defaultSettings(){
+  return { fromName:'Paulo Pinheiro / UCAPS Office', fromStreet:'1499 Middlesex Street',
+    fromCityZip:'Lowell, MA 01854', fromPhone:'978-934-4748' };
+}
+/* Seed — carried over from the original browser-local tracker's first real RMA, so the
+   switch to shared storage doesn't start everyone from a blank tool. */
+const SEED_COMPANIES = [
+  {id:'idmtblsdcryw83a', name:'TouchNet OneCard', street:'2115 Chapman Rd, Suite 159',
+   cityzip:'Chattanooga, TN 37421', phone:'719-522-9222', notes:'OneCard hardware RMAs'}
+];
+const SEED_RMAS = [
+  {equipment:'POS, MB7-NC8FCQ-38', serialNumber:'5F17485', company:'TouchNet OneCard', rmaNumber:'00495056',
+   status:'Pending', ticketNumber:'Case# 00495056', dateShipped:'2026-08-27', carrier:'USPS',
+   trackingNumber:'1ZE544290359887440', replacementReceived:false, dateReceived:'', notes:'',
+   delivery:'1-5 Business Days (Ground)', insuranceAmount:'', trackingRequested:true,
+   id:'idmtbluec00wrnu', dateCreated:'2026-08-27'}
+];
+
+let rmas = [], companies = [], settings = defaultSettings();
+
+function uid(){ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function clone(x){ return JSON.parse(JSON.stringify(x)); }
+
+function saveAll(){
+  return storageSet(STORAGE_KEY, JSON.stringify({ rmas:rmas, companies:companies, settings:settings }));
+}
+/* Back-compat: pull in anything saved under the old per-field localStorage keys from the
+   browser-local version of this tool, so nothing is lost on first load under shared storage. */
+function legacyLocalData(){
+  try{
+    var r = JSON.parse(localStorage.getItem('rmaTracker.rmas.v1')||'null');
+    var c = JSON.parse(localStorage.getItem('rmaTracker.companies.v1')||'null');
+    var s = JSON.parse(localStorage.getItem('rmaTracker.settings.v1')||'null');
+    if(r||c||s) return { rmas:r||[], companies:c||[], settings:s||defaultSettings() };
+  }catch(e){}
+  return null;
+}
+function loadAll(){
+  return Promise.resolve(storageGet(STORAGE_KEY)).then(function(raw){
+    if(raw){
+      try{
+        var s = JSON.parse(raw);
+        rmas = s.rmas || [];
+        companies = s.companies || [];
+        settings = s.settings || defaultSettings();
+        return;
+      }catch(e){}
+    }
+    var legacy = legacyLocalData();
+    rmas = legacy ? legacy.rmas : clone(SEED_RMAS);
+    companies = legacy ? legacy.companies : clone(SEED_COMPANIES);
+    settings = legacy ? legacy.settings : defaultSettings();
+    return saveAll();
+  });
+}
+
+/* ---------- navigation ---------- */
+function switchView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===v));
+  if(v==='dashboard') renderDashboard();
+  if(v==='rmas') renderRmaTable();
+  if(v==='companies') renderCompanies();
+  if(v==='settings') loadSettingsForm();
+}
+
+/* ---------- toast ---------- */
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+/* ---------- dashboard ---------- */
+function daysBetween(d1, d2){
+  return Math.floor((d2 - d1) / (1000*60*60*24));
+}
+function renderDashboard(){
+  const total = rmas.length;
+  const pending = rmas.filter(r=>r.status==='Pending').length;
+  const shipped = rmas.filter(r=>r.status==='Shipped').length;
+  const received = rmas.filter(r=>r.status==='Received').length;
+  const overdue = rmas.filter(r=> r.status==='Shipped' && r.dateShipped && daysBetween(new Date(r.dateShipped), new Date()) > 14 ).length;
+
+  const cards = [
+    {num: total, lbl:'Total RMAs', cls:''},
+    {num: pending, lbl:'Pending shipment', cls:'warn'},
+    {num: shipped, lbl:'Shipped, awaiting replacement', cls:''},
+    {num: received, lbl:'Replacement received', cls:'good'},
+    {num: overdue, lbl:'Shipped 14+ days ago', cls:'bad'},
+  ];
+  document.getElementById('dashCards').innerHTML = cards.map(c=>`
+    <div class="card ${c.cls}"><div class="num">${c.num}</div><div class="lbl">${c.lbl}</div></div>
+  `).join('');
+
+  const outstanding = rmas.filter(r=>r.status!=='Received').sort((a,b)=>{
+    const da = a.dateShipped ? new Date(a.dateShipped) : new Date(0);
+    const db = b.dateShipped ? new Date(b.dateShipped) : new Date(0);
+    return da - db;
+  });
+
+  const tbody = document.getElementById('dashTable');
+  const emptyEl = document.getElementById('dashEmpty');
+  if(outstanding.length===0){
+    tbody.innerHTML = '';
+    emptyEl.style.display='block';
+  } else {
+    emptyEl.style.display='none';
+    tbody.innerHTML = outstanding.map(r=>{
+      const days = r.dateShipped ? daysBetween(new Date(r.dateShipped), new Date()) : null;
+      const isOverdue = days !== null && days > 14;
+      return `<tr>
+        <td>${esc(r.equipment)||'—'}</td>
+        <td>${esc(r.company)||'—'}</td>
+        <td>${esc(r.rmaNumber)||'—'}</td>
+        <td>${statusBadge(r, isOverdue)}</td>
+        <td>${r.dateShipped||'—'}</td>
+        <td>${days===null?'—':days}</td>
+        <td><button class="btn small secondary" onclick="openRmaModal('${r.id}')">Open</button></td>
+      </tr>`;
+    }).join('');
+  }
+}
+
+function statusBadge(r, overdue){
+  if(overdue) return `<span class="badge overdue">Overdue</span>`;
+  const map = {Pending:'pending', Shipped:'shipped', Received:'received'};
+  return `<span class="badge ${map[r.status]||'pending'}">${r.status}</span>`;
+}
+
+/* ---------- RMA table ---------- */
+let sortField = 'dateShipped', sortDir = -1;
+function sortBy(field){
+  if(sortField===field) sortDir *= -1; else { sortField = field; sortDir = 1; }
+  renderRmaTable();
+}
+function esc(s){
+  if(s===undefined||s===null) return '';
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function renderRmaTable(){
+  const q = (document.getElementById('searchBox').value||'').toLowerCase();
+  const statusFilter = document.getElementById('filterStatus').value;
+  let list = rmas.filter(r=>{
+    if(statusFilter && r.status!==statusFilter) return false;
+    if(!q) return true;
+    const hay = [r.equipment,r.serialNumber,r.company,r.rmaNumber,r.trackingNumber,r.ticketNumber].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  list.sort((a,b)=>{
+    let va = a[sortField]||'', vb = b[sortField]||'';
+    if(va < vb) return -1*sortDir;
+    if(va > vb) return 1*sortDir;
+    return 0;
+  });
+
+  const tbody = document.getElementById('rmaTableBody');
+  const emptyEl = document.getElementById('rmaEmpty');
+  if(list.length===0){
+    tbody.innerHTML='';
+    emptyEl.style.display = rmas.length===0 ? 'block' : 'block';
+    emptyEl.querySelector('div.big') && (emptyEl.querySelector('.big').textContent = rmas.length===0?'📦':'🔍');
+    emptyEl.lastChild && (emptyEl.lastChild.textContent = rmas.length===0 ? 'No RMAs yet. Click "New RMA" to log your first equipment return.' : 'No RMAs match your search.');
+    return;
+  }
+  emptyEl.style.display='none';
+
+  tbody.innerHTML = list.map(r=>{
+    const days = r.dateShipped ? daysBetween(new Date(r.dateShipped), new Date()) : null;
+    const isOverdue = r.status==='Shipped' && days!==null && days>14;
+    return `<tr>
+      <td>${esc(r.equipment)||'—'}</td>
+      <td>${esc(r.serialNumber)||'—'}</td>
+      <td>${esc(r.company)||'—'}</td>
+      <td>${esc(r.rmaNumber)||'—'}</td>
+      <td>${statusBadge(r,isOverdue)}</td>
+      <td>${r.dateShipped||'—'}</td>
+      <td>${esc(r.carrier)||'—'}${r.trackingNumber?'<br><span style="color:var(--slate);font-size:11.5px;">'+esc(r.trackingNumber)+'</span>':''}</td>
+      <td>${esc(r.ticketNumber)||'—'}</td>
+      <td class="row-actions" style="justify-content:flex-end;">
+        <button class="btn small secondary" onclick="openRmaModal('${r.id}')">Edit</button>
+        <button class="btn small secondary" onclick="printExisting('${r.id}')">Print</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- RMA modal ---------- */
+let currentRmaId = null;
+function populateCompanyDropdown(selectedName){
+  const sel = document.getElementById('f_company');
+  const options = ['<option value="">— select or type new below —</option>']
+    .concat(companies.map(c=>`<option value="${esc(c.name)}" ${c.name===selectedName?'selected':''}>${esc(c.name)}</option>`));
+  sel.innerHTML = options.join('');
+  // allow free text: add a text fallback input below via same id trick — simplified: keep select only,
+  // but also support "Other..." typed company already stored in r.company even if not in directory
+  if(selectedName && !companies.some(c=>c.name===selectedName)){
+    sel.innerHTML += `<option value="${esc(selectedName)}" selected>${esc(selectedName)} (not in directory)</option>`;
+  }
+}
+function onCompanySelect(){ /* placeholder for future auto-fill of a visible address preview */ }
+
+function openRmaModal(id){
+  currentRmaId = id || null;
+  const r = id ? rmas.find(x=>x.id===id) : null;
+  document.getElementById('rmaModalTitle').textContent = r ? 'Edit RMA' : 'New RMA';
+  document.getElementById('deleteBtn').style.display = r ? 'inline-block' : 'none';
+
+  document.getElementById('f_equipment').value = r?.equipment || '';
+  document.getElementById('f_serial').value = r?.serialNumber || '';
+  populateCompanyDropdown(r?.company || '');
+  document.getElementById('f_rmaNumber').value = r?.rmaNumber || '';
+  document.getElementById('f_status').value = r?.status || 'Pending';
+  document.getElementById('f_ticket').value = r?.ticketNumber || '';
+  document.getElementById('f_dateShipped').value = r?.dateShipped || '';
+  document.getElementById('carrier').value = r?.carrier || '';
+  document.getElementById('f_tracking').value = r?.trackingNumber || '';
+  document.getElementById('f_received').value = r?.replacementReceived ? 'Yes' : 'No';
+  document.getElementById('f_dateReceived').value = r?.dateReceived || '';
+  document.getElementById('f_notes').value = r?.notes || '';
+  document.getElementById('f_delivery').value = r?.delivery || '1-5 Business Days (Ground)';
+  document.getElementById('f_insurance').value = r?.insuranceAmount || '';
+  document.getElementById('f_trackingRequested').checked = r?.trackingRequested !== false;
+  toggleReceivedDate();
+
+  document.getElementById('rmaModalBg').classList.add('active');
+}
+function closeRmaModal(){
+  document.getElementById('rmaModalBg').classList.remove('active');
+  currentRmaId = null;
+}
+function toggleReceivedDate(){
+  const isYes = document.getElementById('f_received').value === 'Yes';
+  document.getElementById('f_dateReceivedWrap').style.display = isYes ? 'block' : 'none';
+}
+
+function collectRmaForm(){
+  return {
+    equipment: document.getElementById('f_equipment').value.trim(),
+    serialNumber: document.getElementById('f_serial').value.trim(),
+    company: document.getElementById('f_company').value.trim(),
+    rmaNumber: document.getElementById('f_rmaNumber').value.trim(),
+    status: document.getElementById('f_status').value,
+    ticketNumber: document.getElementById('f_ticket').value.trim(),
+    dateShipped: document.getElementById('f_dateShipped').value,
+    carrier: document.getElementById('carrier').value,
+    trackingNumber: document.getElementById('f_tracking').value.trim(),
+    replacementReceived: document.getElementById('f_received').value === 'Yes',
+    dateReceived: document.getElementById('f_dateReceived').value,
+    notes: document.getElementById('f_notes').value.trim(),
+    delivery: document.getElementById('f_delivery').value,
+    insuranceAmount: document.getElementById('f_insurance').value.trim(),
+    trackingRequested: document.getElementById('f_trackingRequested').checked,
+  };
+}
+
+function saveRma(thenPrint){
+  const data = collectRmaForm();
+  if(!data.equipment){ toast('Equipment is required'); return; }
+
+  if(currentRmaId){
+    const idx = rmas.findIndex(r=>r.id===currentRmaId);
+    rmas[idx] = {...rmas[idx], ...data};
+  } else {
+    data.id = uid();
+    data.dateCreated = new Date().toISOString().slice(0,10);
+    rmas.push(data);
+    currentRmaId = data.id;
+  }
+  saveAll();
+  toast('RMA saved');
+  if(thenPrint){
+    buildPrintForm(rmas.find(r=>r.id===currentRmaId));
+    closeRmaModal();
+    setTimeout(()=>window.print(), 200);
+  } else {
+    closeRmaModal();
+  }
+  renderRmaTable();
+  renderDashboard();
+}
+
+function deleteCurrentRma(){
+  if(!currentRmaId) return;
+  if(!confirm('Delete this RMA record? This cannot be undone.')) return;
+  rmas = rmas.filter(r=>r.id!==currentRmaId);
+  saveAll();
+  closeRmaModal();
+  renderRmaTable();
+  renderDashboard();
+  toast('RMA deleted');
+}
+
+function printExisting(id){
+  const r = rmas.find(x=>x.id===id);
+  if(!r) return;
+  buildPrintForm(r);
+  setTimeout(()=>window.print(), 150);
+}
+
+/* ---------- printable shipping form ---------- */
+function buildPrintForm(r){
+  const company = companies.find(c=>c.name===r.company);
+  document.getElementById('pf_fromName').textContent = settings.fromName;
+  document.getElementById('pf_fromStreet').textContent = settings.fromStreet;
+  document.getElementById('pf_fromCityZip').textContent = settings.fromCityZip;
+  document.getElementById('pf_fromPhone').textContent = settings.fromPhone;
+
+  document.getElementById('pf_rmaNumber').textContent = r.rmaNumber || '—';
+  document.getElementById('pf_toCompany').textContent = r.company || '—';
+  document.getElementById('pf_toStreet').textContent = company?.street || '';
+  document.getElementById('pf_toCityZip').textContent = company?.cityzip || '';
+  document.getElementById('pf_toPhone').textContent = company?.phone || '';
+
+  ['overnight','2day','3day','ground'].forEach(k=>document.getElementById('chk_'+k).textContent='');
+  const map = {'Next Day/Overnight':'overnight','2 Business Days':'2day','3 Business Days':'3day','1-5 Business Days (Ground)':'ground'};
+  const key = map[r.delivery] || 'ground';
+  document.getElementById('chk_'+key).textContent = 'X';
+
+  document.getElementById('chk_tracking').textContent = r.trackingRequested ? 'X' : '';
+  document.getElementById('pf_email').textContent = r.trackingRequested ? 'Paulo_Pinheiro@uml.edu' : '';
+  document.getElementById('chk_insurance').textContent = r.insuranceAmount ? 'X' : '';
+  document.getElementById('pf_insurance').textContent = r.insuranceAmount || '';
+
+  document.getElementById('pf_datePrepared').textContent = new Date().toLocaleDateString();
+  document.getElementById('pf_notes').textContent = r.notes || '';
+  document.getElementById('pf_equipment').textContent = r.equipment || '';
+  document.getElementById('pf_serial').textContent = r.serialNumber || '';
+  document.getElementById('pf_ticket').textContent = r.ticketNumber || '';
+}
+
+/* ---------- companies ---------- */
+let currentCompanyId = null;
+function renderCompanies(){
+  const list = document.getElementById('companyList');
+  const emptyEl = document.getElementById('companyEmpty');
+  if(companies.length===0){ list.innerHTML=''; emptyEl.style.display='block'; return; }
+  emptyEl.style.display='none';
+  list.innerHTML = companies.map(c=>`
+    <div class="company-item">
+      <div>
+        <div class="name">${esc(c.name)}</div>
+        <div class="details">
+          ${esc(c.street)||''}${c.street&&c.cityzip?'<br>':''}${esc(c.cityzip)||''}
+          ${c.phone?'<br>'+esc(c.phone):''}
+          ${c.notes?'<br><i>'+esc(c.notes)+'</i>':''}
+        </div>
+      </div>
+      <div class="row-actions" style="align-items:flex-start;">
+        <button class="btn small secondary" onclick="openCompanyModal('${c.id}')">Edit</button>
+      </div>
+    </div>
+  `).join('');
+}
+function openCompanyModal(id){
+  currentCompanyId = id || null;
+  const c = id ? companies.find(x=>x.id===id) : null;
+  document.getElementById('companyModalTitle').textContent = c ? 'Edit company' : 'Add company';
+  document.getElementById('companyDeleteBtn').style.display = c ? 'inline-block' : 'none';
+  document.getElementById('c_name').value = c?.name||'';
+  document.getElementById('c_street').value = c?.street||'';
+  document.getElementById('c_cityzip').value = c?.cityzip||'';
+  document.getElementById('c_phone').value = c?.phone||'';
+  document.getElementById('c_notes').value = c?.notes||'';
+  document.getElementById('companyModalBg').classList.add('active');
+}
+function closeCompanyModal(){
+  document.getElementById('companyModalBg').classList.remove('active');
+  currentCompanyId = null;
+}
+function saveCompany(){
+  const name = document.getElementById('c_name').value.trim();
+  if(!name){ toast('Company name is required'); return; }
+  const data = {
+    name,
+    street: document.getElementById('c_street').value.trim(),
+    cityzip: document.getElementById('c_cityzip').value.trim(),
+    phone: document.getElementById('c_phone').value.trim(),
+    notes: document.getElementById('c_notes').value.trim(),
+  };
+  if(currentCompanyId){
+    const idx = companies.findIndex(c=>c.id===currentCompanyId);
+    const oldName = companies[idx].name;
+    companies[idx] = {...companies[idx], ...data};
+    // keep RMA records' company text in sync if renamed
+    if(oldName !== name){
+      rmas.forEach(r=>{ if(r.company===oldName) r.company = name; });
+      saveAll();
+    }
+  } else {
+    data.id = uid();
+    companies.push(data);
+  }
+  saveAll();
+  closeCompanyModal();
+  renderCompanies();
+  toast('Company saved');
+}
+function deleteCurrentCompany(){
+  if(!currentCompanyId) return;
+  if(!confirm('Delete this company from the directory? Existing RMA records keep the company name as text.')) return;
+  companies = companies.filter(c=>c.id!==currentCompanyId);
+  saveAll();
+  closeCompanyModal();
+  renderCompanies();
+  toast('Company deleted');
+}
+
+/* ---------- settings ---------- */
+function loadSettingsForm(){
+  document.getElementById('setFromName').value = settings.fromName;
+  document.getElementById('setFromStreet').value = settings.fromStreet;
+  document.getElementById('setFromCityZip').value = settings.fromCityZip;
+  document.getElementById('setFromPhone').value = settings.fromPhone;
+}
+function saveSettings(){
+  settings = {
+    fromName: document.getElementById('setFromName').value.trim(),
+    fromStreet: document.getElementById('setFromStreet').value.trim(),
+    fromCityZip: document.getElementById('setFromCityZip').value.trim(),
+    fromPhone: document.getElementById('setFromPhone').value.trim(),
+  };
+  saveAll();
+  toast('Settings saved');
+}
+function wipeAll(){
+  if(!confirm('This will permanently delete all RMAs, companies, and settings from shared UCAPS storage, for everyone. Continue?')) return;
+  if(!confirm('Are you absolutely sure? Export a backup first if you need one.')) return;
+  rmas = []; companies = [];
+  settings = defaultSettings();
+  saveAll();
+  renderDashboard(); renderRmaTable(); renderCompanies(); loadSettingsForm();
+  toast('All data cleared');
+}
+
+/* ---------- import / export ---------- */
+function exportJSON(){
+  const payload = {rmas, companies, settings, exportedAt: new Date().toISOString(), version:1};
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'rma-tracker-backup-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Backup exported');
+}
+function importJSON(evt){
+  const file = evt.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!confirm('Import this backup? It will replace all current data in shared UCAPS storage.')) return;
+      rmas = data.rmas || [];
+      companies = data.companies || [];
+      settings = data.settings || settings;
+      saveAll();
+      renderDashboard(); renderRmaTable(); renderCompanies(); loadSettingsForm();
+      toast('Backup imported');
+    } catch(err){
+      alert('Could not read that file — is it a valid RMA Tracker backup (.json)?');
+    }
+    evt.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- init ---------- */
+loadAll().then(function(){
+  renderDashboard();
+  renderRmaTable();
+  renderCompanies();
+  loadSettingsForm();
+});
+</script>
+</body>
+</html>

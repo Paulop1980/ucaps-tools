@@ -31,6 +31,11 @@ ucaps-tools/              ← your GitHub repository root
 │                           only in Supabase (ucaps_store key ucaps_payroll_plan_fy27) —
 │                           never commit plan exports or encumbrance reports here
 │
+├── rma-tracker/
+│   └── index.html        ← RMA Tracker — outgoing equipment returns, vendor directory,
+│                           printable Parcel Delivery Request form. Synced via Supabase
+│                           (ucaps_store key ucaps-rma-tracker-v1)
+│
 └── vvv-badge/
     └── index.html        ← VVV Badge Review Portal
 ```
