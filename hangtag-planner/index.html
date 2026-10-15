@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UCAPS Hangtag Planner</title>
+<script src="../ucaps_shared.js"></script>
+<style>
+  :root{
+    --navy:#1b2a4a; --navy-light:#25396b; --blue:#2f6fed; --blue-dim:#e8f0fe;
+    --slate:#5b6472; --slate-light:#8892a0; --bg:#f3f5f8; --panel:#ffffff; --border:#e1e5eb;
+    --amber:#b7791f; --amber-bg:#fdf3e0; --green:#1f8a5f; --green-bg:#e5f6ee; --red:#c0392b; --red-bg:#fbe9e7;
+    --radius:8px; font-size:15px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif;background:var(--bg);color:#1c2331;}
+  header{background:var(--navy);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;}
+  header .brand{display:flex;align-items:center;gap:12px;}
+  header .brand .mark{width:36px;height:36px;border-radius:8px;background:#c9a227;color:var(--navy);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;}
+  header h1{font-size:17px;margin:0;font-weight:600;letter-spacing:.2px;}
+  header .sub{font-size:12px;color:#aeb9d4;margin-top:2px;}
+  nav{display:flex;gap:4px;background:var(--navy-light);padding:0 20px;flex-wrap:wrap;}
+  nav button{background:none;border:none;color:#c7d0e6;padding:12px 16px;font-size:13.5px;cursor:pointer;border-bottom:3px solid transparent;font-weight:500;}
+  nav button:hover{color:#fff;}
+  nav button.active{color:#fff;border-bottom-color:#c9a227;}
+  main{padding:22px 24px 60px;max-width:1400px;margin:0 auto;}
+  .view{display:none;} .view.active{display:block;}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px;}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+  .card .num{font-size:26px;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;}
+  .card .num.sm{font-size:19px;padding-top:5px;}
+  .card .lbl{font-size:12.5px;color:var(--slate);margin-top:2px;}
+  .card.warn .num{color:var(--amber);} .card.bad .num{color:var(--red);} .card.good .num{color:var(--green);}
+
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:18px;}
+  .panel h2{margin:0 0 4px;font-size:15px;color:var(--navy);}
+  .panel .psub{font-size:12.5px;color:var(--slate);margin:0 0 14px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  @media (max-width:900px){.grid2{grid-template-columns:1fr;}}
+
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px;}
+  .toolbar label.inl{font-size:12.5px;color:var(--slate);display:flex;align-items:center;gap:6px;}
+  .spacer{flex:1;}
+  input,select,textarea{font-family:inherit;}
+  .toolbar input,.toolbar select{padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:#fff;}
+  .toolbar input[type=number]{width:72px;}
+
+  button.btn{background:var(--blue);color:#fff;border:none;padding:9px 16px;border-radius:6px;font-size:13.5px;font-weight:600;cursor:pointer;white-space:nowrap;}
+  button.btn:hover{background:#245bcf;}
+  button.btn.secondary,label.btn.secondary{background:#fff;color:var(--navy);border:1px solid var(--border);}
+  button.btn.secondary:hover{background:#f2f4f7;}
+  button.btn.danger{background:#fff;color:var(--red);border:1px solid #f0c9c3;}
+  button.btn.danger:hover{background:var(--red-bg);}
+  button.btn.small{padding:5px 10px;font-size:12px;}
+  label.btn{display:inline-block;padding:9px 16px;border-radius:6px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  button.btn:disabled{opacity:.5;cursor:default;}
+
+  .tablewrap{overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th{text-align:left;padding:9px 10px;background:#f7f8fa;color:var(--slate);font-size:11.5px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);white-space:nowrap;}
+  td{padding:9px 10px;border-bottom:1px solid #eef0f3;vertical-align:middle;}
+  tr:hover td{background:#fafbfd;}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;}
+  tfoot td{font-weight:700;background:#f7f8fa;}
+  td input.ci,td select.ci{width:100%;min-width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-size:13px;background:#fff;}
+  td input.ci.num{text-align:right;width:90px;min-width:0;}
+  td input.ci:focus,td select.ci:focus{outline:2px solid var(--blue-dim);border-color:var(--blue);}
+  .muted{color:var(--slate-light);} .small{font-size:11.5px;}
+  .code{font-weight:700;color:var(--navy);font-family:ui-monospace,Consolas,monospace;font-size:12.5px;}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;}
+  .tag{display:flex;align-items:center;gap:9px;}
+  .sw{width:14px;height:26px;border-radius:3px;border:1px solid rgba(0,0,0,.25);flex:none;position:relative;}
+  .sw::after{content:"";position:absolute;top:4px;left:50%;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--bg);border:1px solid rgba(0,0,0,.2);}
+
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.2px;white-space:nowrap;}
+  .chip.good{background:var(--green-bg);color:var(--green);} .chip.warn{background:var(--amber-bg);color:var(--amber);}
+  .chip.crit{background:var(--red-bg);color:var(--red);} .chip.muted{background:#eef0f3;color:var(--slate);}
+  .chip.info{background:var(--blue-dim);color:var(--blue);}
+
+  .chart{width:100%;}
+  .chart svg{display:block;width:100%;height:auto;overflow:visible;}
+  .chart text{font-size:11px;fill:var(--slate);font-family:inherit;}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--slate);margin-top:6px;}
+  .legend i{display:inline-block;width:18px;border-top:2.5px solid;vertical-align:middle;margin-right:6px;}
+  .legend i.dash{border-top-style:dashed;}
+
+  .empty{padding:30px 20px;text-align:center;color:var(--slate-light);}
+  .note{background:var(--blue-dim);border-radius:6px;padding:10px 14px;font-size:12.5px;color:#23407a;margin-bottom:14px;line-height:1.5;}
+  .note.warn{background:var(--amber-bg);color:#7a4f10;}
+
+  /* email preview */
+  .email{border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+  .email .hdr{background:#f7f8fa;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;line-height:1.8;}
+  .email .hdr b{display:inline-block;min-width:64px;color:var(--slate);font-weight:600;}
+  .email .body{padding:16px 18px;font-family:Calibri,"Segoe UI",Arial,sans-serif;font-size:14.5px;line-height:1.45;color:#000;background:#fff;}
+  .email .body table{width:auto;border-collapse:collapse;font-size:13.5px;}
+  .email .body th,.email .body td{border:1px solid #999;padding:4px 10px;background:#fff;color:#000;text-transform:none;letter-spacing:0;font-size:13.5px;}
+  .email .body th{background:#f2f2f2;font-weight:700;}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+
+  /* orders */
+  .order{border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:12px;}
+  .order .top{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start;}
+  .order .ttl{font-weight:700;color:var(--navy);font-size:14.5px;}
+  .order .meta{font-size:12.5px;color:var(--slate);margin-top:3px;line-height:1.6;}
+  .steps{display:flex;gap:0;margin:12px 0 10px;flex-wrap:wrap;}
+  .steps span{font-size:11px;padding:4px 10px;background:#eef0f3;color:var(--slate);border-right:2px solid #fff;font-weight:600;}
+  .steps span:first-child{border-radius:12px 0 0 12px;} .steps span:last-child{border-radius:0 12px 12px 0;border-right:none;}
+  .steps span.done{background:var(--green-bg);color:var(--green);} .steps span.cur{background:var(--blue);color:#fff;}
+
+  /* modal */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(15,22,40,.5);align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto;z-index:50;}
+  .modal-bg.active{display:flex;}
+  .modal{background:#fff;border-radius:10px;max-width:760px;width:100%;padding:24px 26px 26px;}
+  .modal h2{margin:0 0 4px;font-size:17px;color:var(--navy);}
+  .modal .modal-sub{font-size:12.5px;color:var(--slate);margin-bottom:16px;}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+  .form-grid.three{grid-template-columns:1fr 1fr 1fr;}
+  .form-grid .full{grid-column:1/-1;}
+  @media (max-width:640px){.form-grid,.form-grid.three{grid-template-columns:1fr;}}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:4px;}
+  .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13.5px;}
+  .field textarea{resize:vertical;min-height:60px;}
+  .field .hint{font-size:11.5px;color:var(--slate-light);margin-top:3px;}
+  .modal-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border);flex-wrap:wrap;}
+  fieldset{border:1px solid var(--border);border-radius:8px;padding:12px 14px 14px;margin:0 0 14px;}
+  legend{font-size:12px;font-weight:700;color:var(--navy);padding:0 6px;}
+
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--navy);color:#fff;padding:11px 18px;border-radius:8px;font-size:13px;box-shadow:0 4px 14px rgba(0,0,0,.2);opacity:0;transform:translateY(10px);transition:.25s;pointer-events:none;z-index:100;}
+  .toast.show{opacity:1;transform:translateY(0);}
+  footer.appfoot{text-align:center;color:var(--slate-light);font-size:11.5px;padding:20px;}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;}
+  .seg button{background:#fff;border:none;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--slate);border-right:1px solid var(--border);}
+  .seg button:last-child{border-right:none;}
+  .seg button.on{background:var(--navy);color:#fff;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="mark">HT</div>
+    <div>
+      <h1>UCAPS Hangtag Planner</h1>
+      <div class="sub">UCard, Access &amp; Parking Services — Parking hangtag stock, usage &amp; reorders</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span id="whoami" style="font-size:12px;color:#aeb9d4;"></span>
+    <span id="storeMode" style="font-size:11px;color:#aeb9d4;"></span>
+  </div>
+</header>
+
+<nav id="nav">
+  <button class="active" data-view="dashboard">Dashboard</button>
+  <button data-view="inventory">Inventory</button>
+  <button data-view="planner">Order Planner</button>
+  <button data-view="quote">Quote Request</button>
+  <button data-view="orders">Orders</button>
+  <button data-view="history">Issue History</button>
+  <button data-view="settings">Settings</button>
+</nav>
+
+<main>
+  <div class="view active" id="view-dashboard"></div>
+  <div class="view" id="view-inventory"></div>
+  <div class="view" id="view-planner"></div>
+  <div class="view" id="view-quote"></div>
+  <div class="view" id="view-orders"></div>
+  <div class="view" id="view-history"></div>
+  <div class="view" id="view-settings"></div>
+</main>
+<footer class="appfoot">UCAPS internal tool · UMass Lowell</footer>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+<input type="file" id="fileHist" accept=".xlsx,.csv" style="display:none">
+<input type="file" id="fileBackup" accept="application/json,.json" style="display:none">
+
+<script>
+/* Starting issue history: monthly counts per permit code from T2 "Decals Issued by Multiple Fiscal Years - All Simple"
+   p = new physical tag numbers first issued that month, a = all issue records. No personal data. */
+const SEED_USAGE={"CP":{"p":{"2020-08":1,"2021-08":17,"2021-09":16,"2021-10":6,"2021-11":2,"2022-01":5,"2022-02":4,"2022-08":19,"2022-09":13,"2022-10":1,"2022-11":1,"2023-01":9,"2023-02":2,"2023-03":1,"2023-08":10,"2023-09":20,"2023-10":6,"2023-11":4,"2024-01":5,"2024-02":3,"2024-03":3,"2024-08":11,"2024-09":34,"2024-10":4,"2024-11":1,"2025-01":6,"2025-02":3,"2025-03":1,"2025-08":14,"2025-09":28,"2025-10":2,"2026-01":9,"2026-02":5,"2026-03":2,"2026-07":1,"2026-08":24,"2026-09":18},"a":{"2020-08":2,"2021-08":36,"2021-09":32,"2021-10":11,"2021-11":4,"2022-01":10,"2022-02":8,"2022-08":44,"2022-09":28,"2022-10":2,"2022-11":2,"2023-01":20,"2023-02":4,"2023-03":1,"2023-08":21,"2023-09":40,"2023-10":12,"2023-11":9,"2024-01":9,"2024-02":6,"2024-03":5,"2024-08":21,"2024-09":73,"2024-10":8,"2024-11":3,"2025-01":12,"2025-02":6,"2025-03":2,"2025-08":27,"2025-09":58,"2025-10":4,"2026-01":18,"2026-02":8,"2026-03":4,"2026-07":2,"2026-08":47,"2026-09":36},"last":[908,"2026-09-29"]},"CRC":{"p":{"2021-06":18,"2021-07":66,"2021-08":15,"2021-09":23,"2021-10":18,"2021-11":18,"2021-12":17,"2022-01":9,"2022-02":13,"2022-03":25,"2022-04":5,"2022-05":21,"2022-06":25,"2022-08":20,"2022-09":18,"2022-10":17,"2022-11":21,"2022-12":18,"2023-02":32,"2023-03":10,"2023-04":19,"2023-05":15,"2023-06":26,"2023-07":13,"2023-08":13,"2023-09":20,"2023-10":16,"2023-11":16,"2023-12":46,"2024-01":26,"2024-02":28,"2024-03":21,"2024-04":12,"2024-05":16,"2024-06":25,"2024-07":25,"2024-08":13,"2024-09":17,"2024-10":13,"2024-11":43,"2024-12":15,"2025-01":26,"2025-02":33,"2025-03":33,"2025-04":18,"2025-05":12,"2025-06":22,"2025-07":10,"2025-08":14,"2025-09":13,"2025-10":17,"2025-11":11,"2025-12":16,"2026-01":41,"2026-02":42,"2026-03":29,"2026-04":22,"2026-05":9,"2026-06":30,"2026-07":8,"2026-08":20,"2026-09":21,"2026-10":10},"a":{"2021-06":18,"2021-07":68,"2021-08":15,"2021-09":23,"2021-10":18,"2021-11":18,"2021-12":17,"2022-01":9,"2022-02":13,"2022-03":26,"2022-04":5,"2022-05":21,"2022-06":25,"2022-08":28,"2022-09":19,"2022-10":17,"2022-11":21,"2022-12":18,"2023-02":33,"2023-03":10,"2023-04":20,"2023-05":15,"2023-06":26,"2023-07":13,"2023-08":13,"2023-09":21,"2023-10":16,"2023-11":16,"2023-12":46,"2024-01":26,"2024-02":28,"2024-03":21,"2024-04":12,"2024-05":16,"2024-06":26,"2024-07":25,"2024-08":13,"2024-09":17,"2024-10":13,"2024-11":45,"2024-12":15,"2025-01":26,"2025-02":33,"2025-03":33,"2025-04":19,"2025-05":12,"2025-06":22,"2025-07":10,"2025-08":14,"2025-09":13,"2025-10":17,"2025-11":11,"2025-12":16,"2026-01":42,"2026-02":42,"2026-03":29,"2026-04":22,"2026-05":9,"2026-06":30,"2026-07":8,"2026-08":20,"2026-09":22,"2026-10":10},"last":[5415,"2026-10-14"]},"EP":{"p":{"2020-09":35,"2020-10":1,"2020-11":2,"2020-12":1,"2021-01":1,"2021-07":23,"2021-09":2,"2022-05":2,"2023-05":2,"2023-08":1,"2024-06":2,"2024-08":100,"2025-02":3,"2025-06":2,"2026-06":2,"2026-08":48},"a":{"2020-09":35,"2020-10":1,"2020-11":2,"2020-12":1,"2021-01":1,"2021-07":23,"2021-09":2,"2022-05":2,"2023-05":2,"2023-08":1,"2024-06":2,"2024-08":101,"2025-02":3,"2025-06":2,"2026-06":2,"2026-08":49},"last":[543,"2026-08-27"]},"HC":{"p":{"2021-04":1,"2021-08":37,"2021-09":53,"2021-10":10,"2021-11":5,"2022-01":1,"2022-02":1,"2022-03":3,"2022-04":1,"2022-08":51,"2022-09":87,"2022-10":4,"2023-09":2,"2026-05":2,"2026-06":2,"2026-08":1},"a":{"2021-04":1,"2021-08":37,"2021-09":56,"2021-10":10,"2021-11":5,"2022-01":1,"2022-02":2,"2022-03":3,"2022-04":1,"2022-08":52,"2022-09":88,"2022-10":8,"2022-11":1,"2022-12":2,"2023-01":19,"2023-02":1,"2023-04":1,"2023-08":28,"2023-09":32,"2023-10":7,"2023-12":2,"2024-01":7,"2024-03":3,"2024-04":1,"2024-05":5,"2024-07":2,"2024-08":56,"2024-09":29,"2024-10":2,"2025-01":8,"2025-06":1,"2025-08":26,"2025-09":28,"2025-10":2,"2025-12":1,"2026-01":6,"2026-02":2,"2026-05":5,"2026-06":2,"2026-08":2,"2026-09":6,"2026-10":1},"last":[15392,"2026-06-01"]},"HF":{"p":{"2020-08":46,"2020-09":18,"2020-10":2,"2020-11":3,"2021-02":2,"2021-03":3,"2021-04":2,"2021-05":2,"2021-06":3,"2021-07":6,"2021-08":2,"2021-09":11,"2021-10":2,"2021-11":4,"2021-12":3,"2022-01":2,"2022-02":4,"2022-03":3,"2022-04":10,"2022-05":5,"2022-06":4,"2022-07":2,"2022-08":5,"2022-09":2,"2022-10":3,"2022-11":2,"2022-12":1,"2023-01":4,"2023-02":3,"2023-03":2,"2023-04":4,"2023-06":2,"2023-07":2,"2023-08":15,"2023-09":9,"2023-10":3,"2023-11":1,"2023-12":2,"2024-01":3,"2024-02":3,"2024-03":3,"2024-04":1,"2024-05":1,"2024-06":1,"2024-07":4,"2024-08":12,"2024-09":2,"2024-10":6,"2024-11":11,"2024-12":6,"2025-01":4,"2025-02":1,"2025-03":4,"2025-04":2,"2025-05":4,"2025-07":3,"2025-08":15,"2025-09":2,"2025-11":1,"2025-12":1,"2026-01":2,"2026-02":3,"2026-03":1,"2026-04":1,"2026-05":2,"2026-08":8,"2026-09":6,"2026-10":1},"a":{"2020-08":47,"2020-09":18,"2020-10":2,"2020-11":3,"2021-02":2,"2021-03":3,"2021-04":2,"2021-05":2,"2021-06":3,"2021-07":6,"2021-08":2,"2021-09":11,"2021-10":2,"2021-11":4,"2021-12":3,"2022-01":2,"2022-02":4,"2022-03":3,"2022-04":10,"2022-05":5,"2022-06":4,"2022-07":2,"2022-08":5,"2022-09":2,"2022-10":3,"2022-11":2,"2022-12":1,"2023-01":4,"2023-02":3,"2023-03":2,"2023-04":4,"2023-06":2,"2023-07":2,"2023-08":15,"2023-09":9,"2023-10":3,"2023-11":2,"2023-12":2,"2024-01":3,"2024-02":3,"2024-03":3,"2024-04":1,"2024-05":1,"2024-06":1,"2024-07":5,"2024-08":12,"2024-09":2,"2024-10":6,"2024-11":12,"2024-12":6,"2025-01":4,"2025-02":2,"2025-03":4,"2025-04":2,"2025-05":4,"2025-07":3,"2025-08":15,"2025-09":2,"2025-11":1,"2025-12":1,"2026-01":2,"2026-02":3,"2026-03":1,"2026-04":1,"2026-05":2,"2026-08":8,"2026-09":6,"2026-10":1},"last":[1529,"2026-10-06"]},"HR":{"p":{"2021-08":28,"2021-09":21,"2021-10":11,"2021-11":3,"2022-01":4,"2022-02":2,"2022-03":2,"2022-05":2,"2022-08":80,"2022-09":45,"2022-10":2,"2023-01":1,"2023-07":1,"2023-10":1,"2024-02":1,"2024-05":2,"2024-06":2,"2026-05":5,"2026-06":9,"2026-07":1},"a":{"2021-08":28,"2021-09":21,"2021-10":11,"2021-11":3,"2022-01":4,"2022-02":2,"2022-03":2,"2022-05":2,"2022-08":81,"2022-09":45,"2022-10":5,"2022-11":3,"2023-01":14,"2023-02":4,"2023-03":3,"2023-07":1,"2023-08":46,"2023-09":19,"2023-10":11,"2023-11":5,"2023-12":2,"2024-01":9,"2024-02":5,"2024-03":3,"2024-05":6,"2024-06":2,"2024-08":57,"2024-09":35,"2024-10":6,"2024-11":1,"2024-12":5,"2025-01":4,"2025-02":2,"2025-03":1,"2025-05":14,"2025-08":31,"2025-09":21,"2025-10":2,"2025-11":2,"2025-12":1,"2026-01":9,"2026-04":1,"2026-05":7,"2026-06":12,"2026-07":1,"2026-08":1,"2026-09":8,"2026-10":1},"last":[16896,"2026-06-04"]},"HV":{"p":{"2021-02":1,"2021-03":1,"2021-05":12,"2021-08":5,"2021-09":5,"2021-10":8,"2021-12":3,"2022-02":5,"2022-05":4,"2022-08":6,"2022-09":9,"2022-10":1,"2023-01":1,"2023-04":2,"2023-05":1,"2023-08":13,"2023-09":1,"2024-08":4,"2024-09":15,"2024-10":3,"2024-11":2,"2024-12":2,"2025-01":3,"2025-03":1,"2025-04":2,"2025-08":12,"2025-09":2,"2026-02":2,"2026-08":10,"2026-09":2,"2026-10":1},"a":{"2021-02":1,"2021-03":1,"2021-05":12,"2021-08":5,"2021-09":5,"2021-10":8,"2021-12":3,"2022-02":5,"2022-05":4,"2022-08":6,"2022-09":9,"2022-10":1,"2023-01":1,"2023-04":2,"2023-05":1,"2023-08":13,"2023-09":1,"2024-08":4,"2024-09":15,"2024-10":3,"2024-11":3,"2024-12":2,"2025-01":3,"2025-03":1,"2025-04":2,"2025-08":12,"2025-09":2,"2026-02":2,"2026-08":10,"2026-09":2,"2026-10":1},"last":[1923,"2026-10-09"]},"SV":{"p":{"2020-08":18,"2020-09":68,"2020-10":7,"2021-01":17,"2021-02":1,"2021-03":2,"2021-06":2,"2021-07":2,"2021-08":20,"2021-09":76,"2021-10":3,"2021-11":3,"2021-12":1,"2022-01":23,"2022-02":4,"2022-03":4,"2022-04":8,"2022-05":1,"2022-06":2,"2022-07":6,"2022-08":57,"2022-09":67,"2022-10":12,"2022-11":2,"2022-12":10,"2023-01":3,"2023-02":1,"2023-05":2,"2023-06":1,"2023-08":66,"2023-09":52,"2023-10":12,"2023-11":6,"2023-12":8,"2024-01":15,"2024-02":6,"2024-03":8,"2024-04":5,"2024-05":9,"2024-06":6,"2024-07":8,"2024-08":58,"2024-09":66,"2024-10":20,"2024-11":7,"2024-12":6,"2025-01":9,"2025-02":2,"2025-03":6,"2025-04":2,"2025-05":4,"2025-06":2,"2025-07":7,"2025-08":62,"2025-09":66,"2025-10":6,"2025-12":1,"2026-01":3,"2026-02":3,"2026-03":2,"2026-04":10,"2026-05":2,"2026-06":2,"2026-07":2,"2026-08":46,"2026-09":77,"2026-10":9},"a":{"2020-08":18,"2020-09":71,"2020-10":7,"2021-01":17,"2021-02":1,"2021-03":2,"2021-06":2,"2021-07":3,"2021-08":20,"2021-09":76,"2021-10":3,"2021-11":3,"2021-12":1,"2022-01":24,"2022-02":4,"2022-03":4,"2022-04":8,"2022-05":1,"2022-06":2,"2022-07":7,"2022-08":57,"2022-09":67,"2022-10":12,"2022-11":2,"2022-12":10,"2023-01":3,"2023-02":1,"2023-05":2,"2023-06":1,"2023-08":67,"2023-09":53,"2023-10":12,"2023-11":6,"2023-12":8,"2024-01":16,"2024-02":7,"2024-03":8,"2024-04":5,"2024-05":9,"2024-06":6,"2024-07":8,"2024-08":58,"2024-09":66,"2024-10":20,"2024-11":7,"2024-12":6,"2025-01":9,"2025-02":2,"2025-03":6,"2025-04":3,"2025-05":4,"2025-06":2,"2025-07":7,"2025-08":63,"2025-09":66,"2025-10":6,"2025-12":1,"2026-01":3,"2026-02":4,"2026-03":2,"2026-04":10,"2026-05":2,"2026-06":2,"2026-07":2,"2026-08":47,"2026-09":77,"2026-10":9},"last":[2879,"2026-10-08"]},"VV":{"p":{"2020-08":33,"2020-09":43,"2020-10":31,"2020-11":17,"2020-12":10,"2021-01":24,"2021-02":47,"2021-03":41,"2021-04":24,"2021-05":20,"2021-06":19,"2021-07":36,"2021-08":90,"2021-09":152,"2021-10":132,"2021-11":62,"2021-12":34,"2022-01":111,"2022-02":77,"2022-03":81,"2022-04":59,"2022-05":41,"2022-06":34,"2022-07":34,"2022-08":117,"2022-09":147,"2022-10":140,"2022-11":66,"2022-12":47,"2023-01":108,"2023-02":59,"2023-03":94,"2023-04":60,"2023-05":49,"2023-06":45,"2023-07":36,"2023-08":174,"2023-09":153,"2023-10":108,"2023-11":84,"2023-12":52,"2024-01":118,"2024-02":92,"2024-03":86,"2024-04":81,"2024-05":52,"2024-06":53,"2024-07":67,"2024-08":132,"2024-09":177,"2024-10":106,"2024-11":103,"2024-12":74,"2025-01":138,"2025-02":80,"2025-03":105,"2025-04":96,"2025-05":61,"2025-06":20,"2025-07":53,"2025-08":146,"2025-09":173,"2025-10":116,"2025-11":78,"2025-12":78,"2026-01":138,"2026-02":90,"2026-03":127,"2026-04":88,"2026-05":57,"2026-06":40,"2026-07":38,"2026-08":133,"2026-09":173,"2026-10":46},"a":{"2020-08":34,"2020-09":43,"2020-10":31,"2020-11":17,"2020-12":10,"2021-01":24,"2021-02":47,"2021-03":41,"2021-04":24,"2021-05":20,"2021-06":19,"2021-07":36,"2021-08":90,"2021-09":155,"2021-10":133,"2021-11":63,"2021-12":35,"2022-01":112,"2022-02":78,"2022-03":82,"2022-04":61,"2022-05":43,"2022-06":35,"2022-07":34,"2022-08":118,"2022-09":150,"2022-10":141,"2022-11":66,"2022-12":47,"2023-01":108,"2023-02":59,"2023-03":95,"2023-04":60,"2023-05":49,"2023-06":45,"2023-07":36,"2023-08":176,"2023-09":153,"2023-10":108,"2023-11":88,"2023-12":52,"2024-01":120,"2024-02":92,"2024-03":86,"2024-04":81,"2024-05":53,"2024-06":53,"2024-07":165,"2024-08":199,"2024-09":264,"2024-10":199,"2024-11":177,"2024-12":159,"2025-01":202,"2025-02":134,"2025-03":162,"2025-04":126,"2025-05":79,"2025-06":27,"2025-07":55,"2025-08":147,"2025-09":195,"2025-10":149,"2025-11":91,"2025-12":93,"2026-01":146,"2026-02":106,"2026-03":135,"2026-04":97,"2026-05":69,"2026-06":41,"2026-07":38,"2026-08":136,"2026-09":179,"2026-10":47},"last":[17398,"2026-10-14"]},"VP":{"p":{"2021-11":9,"2023-08":100,"2023-12":8,"2024-03":20,"2024-04":48,"2024-05":8,"2024-06":7,"2025-12":2,"2026-03":2,"2026-04":5,"2026-09":2,"2026-10":1},"a":{"2021-09":52,"2021-10":84,"2021-11":61,"2021-12":20,"2022-01":8,"2022-02":121,"2022-03":79,"2022-04":115,"2022-05":18,"2022-06":7,"2022-08":15,"2022-09":174,"2022-10":189,"2022-11":86,"2022-12":54,"2023-01":43,"2023-02":146,"2023-03":108,"2023-04":106,"2023-05":235,"2023-06":5,"2023-07":5,"2023-08":108,"2023-09":67,"2023-10":121,"2023-11":95,"2023-12":47,"2024-01":65,"2024-02":98,"2024-03":138,"2024-04":121,"2024-05":16,"2024-06":10,"2024-07":1,"2024-08":60,"2024-09":104,"2024-10":226,"2024-11":113,"2024-12":86,"2025-01":63,"2025-02":136,"2025-03":107,"2025-04":123,"2025-05":23,"2025-06":35,"2025-07":12,"2025-08":10,"2025-09":95,"2025-10":217,"2025-11":50,"2025-12":62,"2026-01":31,"2026-02":65,"2026-03":92,"2026-04":131,"2026-05":28,"2026-06":5,"2026-07":7,"2026-08":213,"2026-09":156,"2026-10":50},"last":[14411,"2026-10-05"]},"HH":{"p":{"2020-08":1,"2020-10":1,"2021-01":1,"2021-03":1,"2021-04":1,"2021-08":2,"2021-09":7,"2021-10":4,"2021-11":2,"2021-12":2,"2022-01":3,"2022-02":5,"2022-03":5,"2022-04":2,"2022-05":1,"2022-06":2,"2022-07":2,"2022-08":1,"2022-09":9,"2022-10":7,"2022-11":5,"2022-12":2,"2023-01":11,"2023-02":4,"2023-03":7,"2023-04":3,"2023-07":1,"2023-08":4,"2023-09":9,"2023-10":4,"2023-11":3,"2024-01":10,"2024-02":1,"2024-03":3,"2024-04":6,"2024-07":1,"2024-08":2,"2024-09":12,"2024-10":5,"2024-11":3,"2024-12":3,"2025-01":3,"2025-02":3,"2025-03":3,"2025-04":3,"2025-05":3,"2025-08":2,"2025-09":7,"2025-10":1,"2025-11":2,"2026-01":5,"2026-02":5,"2026-03":6,"2026-04":3,"2026-06":3,"2026-08":3,"2026-09":5,"2026-10":3},"a":{"2020-08":1,"2020-10":1,"2021-01":1,"2021-03":1,"2021-04":1,"2021-08":2,"2021-09":7,"2021-10":4,"2021-11":2,"2021-12":2,"2022-01":3,"2022-02":5,"2022-03":5,"2022-04":2,"2022-05":1,"2022-06":2,"2022-07":2,"2022-08":1,"2022-09":9,"2022-10":7,"2022-11":5,"2022-12":2,"2023-01":11,"2023-02":4,"2023-03":7,"2023-04":4,"2023-07":1,"2023-08":4,"2023-09":9,"2023-10":4,"2023-11":3,"2024-01":10,"2024-02":1,"2024-03":3,"2024-04":6,"2024-07":1,"2024-08":2,"2024-09":13,"2024-10":5,"2024-11":4,"2024-12":3,"2025-01":3,"2025-02":3,"2025-03":3,"2025-04":3,"2025-05":3,"2025-08":2,"2025-09":7,"2025-10":1,"2025-11":2,"2026-01":5,"2026-02":5,"2026-03":6,"2026-04":3,"2026-06":3,"2026-08":3,"2026-09":5,"2026-10":3},"last":[4214,"2026-10-14"]}};
+const SEED_USAGE_META={"from": "2020-08-03", "to": "2026-10-15", "rows": 75474, "source": "Decals Issued by Multiple Fiscal Years - All Simple.xlsx", "importedAt": "2026-10-15"};
+
+</script>
+<script>
+"use strict";
+/* ================= storage: shared Supabase store when hosted, browser storage otherwise ================= */
+const STORAGE_KEY = 'ucaps-hangtag-planner-v1';
+const HOSTED = !!(window.db && window.db.get);
+if (typeof ucapsGate === "function") ucapsGate();
+document.addEventListener('ucaps:signedin', e => {
+  const who = document.getElementById('whoami'); if (who && e.detail) who.textContent = e.detail.name || e.detail.email || '';
+});
+async function storeGet(){
+  if (HOSTED) { try { const v = await window.db.get(STORAGE_KEY); return v == null ? null : (typeof v === 'string' ? JSON.parse(v) : v); } catch(e){ return null; } }
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch(e){ return null; }
+}
+async function storeSet(obj){
+  if (HOSTED) { try { await window.db.set(STORAGE_KEY, obj); return true; } catch(e){ return false; } }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(obj)); return true; } catch(e){ return false; }
+}
+let _saveT = null;
+function save(){ clearTimeout(_saveT); _saveT = setTimeout(() => storeSet(S), 400); }
+
+/* ================= dates & helpers ================= */
+const DAY = 864e5;
+const TODAY = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); })();
+const D = {
+  parse(s){ if(!s) return null; if (s instanceof Date) return s; const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; },
+  iso(d){ if(!d) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); },
+  fmt(d){ d = D.parse(d); return d ? d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'; },
+  short(d){ d = D.parse(d); return d ? d.toLocaleDateString('en-US',{month:'short',year:'numeric'}) : '—'; },
+  slash(d){ d = D.parse(d); return d ? (d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear() : ''; },
+  addDays(d,n){ return new Date(d.getTime() + n*DAY); },
+  addMonths(d,n){ const r = new Date(d.getFullYear(), d.getMonth()+n, 1); const dim = new Date(r.getFullYear(), r.getMonth()+1, 0).getDate(); r.setDate(Math.min(d.getDate(), dim)); return r; },
+  dim(d){ return new Date(d.getFullYear(), d.getMonth()+1, 0).getDate(); },
+  days(a,b){ return Math.round((b - a)/DAY); }
+};
+const fyOf = d => d.getMonth() >= 6 ? d.getFullYear()+1 : d.getFullYear();
+const ymKey = (y,m) => y + '-' + String(m+1).padStart(2,'0');
+const uid = () => 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtN = n => (n == null || isNaN(n)) ? '—' : Math.round(n).toLocaleString('en-US');
+const fmt$ = n => (n == null || isNaN(n)) ? '—' : '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:2, maximumFractionDigits:2});
+const clone = x => JSON.parse(JSON.stringify(x));
+function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2400); }
+function numOf(s){ const m = String(s ?? '').match(/(\d+)\s*$/); return m ? parseInt(m[1],10) : null; }
+function tagNo(item, n){ return n == null ? '' : (item.code || '') + String(n).padStart(item.pad || 5, '0'); }
+function itemById(id){ return S.items.find(i => i.id === id); }
+function swatch(item){ return `<span class="sw" title="${esc(item.color||'')}" style="background:${esc(item.hex||'#ccc')}"></span>`; }
+function tagCell(item, sub){ return `<div class="tag">${swatch(item)}<div><span class="code">${esc(item.code||'—')}</span> ${esc(item.name)}${sub?`<div class="small muted">${sub}</div>`:''}</div></div>`; }
+
+/* ================= seed / defaults ================= */
+function seedItems(){
+  const rows = [
+    ['cp','Carpool','CP','71385','CP01000',100,'Green','#2e9e4f','phys'],
+    ['crc','CRC Member','CRC','71385','CRC05600',172,'Red','#d23a3a','phys'],
+    ['ep','External Partner','EP','398314','EP00650',161,'Purple','#7d4fc4','phys'],
+    ['hc','Hangtag Commuter','HC','405762','HC15600',378,'Blue','#2f6fed','all'],
+    ['hf','Hangtag Faculty/Staff','HF','','HF01650',120,'White','#ffffff','phys'],
+    ['hr','Hangtag Resident','HR','398314','HR16900',466,'Light Green','#9be07a','all'],
+    ['hv','Short-Term Visitor','HV','75918','HV02600',688,'Orange','#f08a24','phys'],
+    ['sv','Service Vehicle','SV','71385','SV03050',170,'Yellow','#f2d024','phys'],
+    ['vv','Vendor/Visitor','VV','75918','VV18600',1154,'Gold','#c9a227','phys'],
+    ['vp','Visitor Day Pass','VP','','VP14500',155,'Blue','#2f6fed','all'],
+    ['hh','Handicap Hangtag','HH','','HH04400',182,'White','#ffffff','phys'],
+    ['iclass','iClass Tags','','','',100,'','#9aa4b2','none']
+  ];
+  return rows.map(r => ({ id:r[0], name:r[1], code:r[2], jobId:r[3], endNum:r[4], onHand:r[5], countedAt:'2026-10-15',
+    color:r[6], hex:r[7], basis:r[8], type:r[2]?'Long':'', material:r[2]?'Hangtuf':'', pad:5, active:true, notes:'' }));
+}
+function seedOrders(){
+  return [{
+    id:'ord-75918', vendor:'Weldon, Williams & Lick, Inc.', status:'received',
+    requestDate:'2026-04-29', quoteDate:'2026-04-29', estimateNo:'32938', amount:3390.74, freight:83.66,
+    poNo:'', invoiceNo:'P10891', invoiceDate:'2026-05-13', jobNo:'75918', proofDate:'', shipDate:'', expectedDate:'', receivedDate:'',
+    applied:true,
+    lines:[
+      {itemId:'hv', code:'HV', qty:400,  start:'HV02201', end:'HV02600', lastJob:'405762', color:'Orange', type:'Long', material:'Hangtuf'},
+      {itemId:'vv', code:'VV', qty:1000, start:'VV17601', end:'VV18600', lastJob:'71385',  color:'Gold',   type:'Long', material:'Hangtuf'}
+    ],
+    notes:'FY26 restock. Proforma (advance) invoice P10891, due 6/12/2026, total $3,474.40 incl. freight. Already included in the current inventory counts.'
+  }];
+}
+function defaultSettings(){
+  return {
+    vendor:{ company:'Weldon, Williams & Lick, Inc.', contactFirst:'Robyn', to:'Robyn Shelby <rshelby@wwlinc.com>',
+      cc:'Evan Fallon <Evan_Fallon@uml.edu>; Rachel Sullivan <Rachel_Sullivan@uml.edu>; online_csr@wwlinc.com',
+      customerNo:'23081', phone:'800-242-4995' },
+    quoteSubject:'Hangtag Restock Quote Request – UMass Lowell UCAPS {FY}',
+    quoteIntro:"I'd like to start the process of restocking some of our hangtags. Could I get a quote for restocking the following hangtags? Please let me know if you need any additional information or images.",
+    sender:{ first:'Paulo', includeSig:false,
+      sig:"Paulo Pinheiro, '06,'14\nDirector - UCAPS & Integrated Security\nUCARD, ACCESS & PARKING SERVICES\nE: Paulo_Pinheiro@uml.edu\nT: 978-934-4748" },
+    po:{ first:'Val', to:'' },
+    spec:'3.5" x 8", 22pt Proprint, 2 color front, die notch for hanging, round 4 corners, prints 1 side, numbered with prefix',
+    adminWeeks:2, vendorWeeks:8, safetyMonths:2, coverMonths:12, warnDays:60, histYears:3,
+    roundTo:100, minQty:100, priceEach:2.42, freight:85
+  };
+}
+function defaults(){
+  return { v:1, items:seedItems(), ledger:[{id:uid(), date:'2026-10-15', itemId:null, kind:'note', note:'Starting counts loaded from Hangtag Inventory Information.xlsx'}],
+    usage:clone(SEED_USAGE), usageMeta:clone(SEED_USAGE_META), orders:seedOrders(), draft:{lines:[]}, plan:{qty:{}}, settings:defaultSettings() };
+}
+let S = null;
+
+/* ================= usage model ================= */
+function seriesOf(item){ const u = S.usage[item.code]; if (!u || item.basis === 'none') return null; return item.basis === 'all' ? u.a : u.p; }
+function histFYs(){ const cur = fyOf(TODAY), n = Math.max(1, +S.settings.histYears || 3); return Array.from({length:n}, (_,i) => cur - n + i); }
+function profile(item){
+  const s = seriesOf(item), p = new Array(12).fill(0); if (!s) return p;
+  const fys = histFYs();
+  fys.forEach(fy => { for (let cal = 0; cal < 12; cal++){ const yr = cal >= 6 ? fy-1 : fy; p[cal] += (s[ymKey(yr,cal)] || 0); } });
+  return p.map(v => v / fys.length);
+}
+const annual = item => profile(item).reduce((a,b) => a+b, 0);
+function usageBetween(prof, a, b){
+  let tot = 0, d = new Date(a);
+  while (d < b){ const nx = new Date(d.getFullYear(), d.getMonth()+1, 1); const e = nx < b ? nx : b; tot += prof[d.getMonth()] * ((e - d)/DAY) / D.dim(d); d = e; }
+  return tot;
+}
+function leadDays(){ return (+S.settings.adminWeeks + +S.settings.vendorWeeks) * 7; }
+function safetyDays(){ return (+S.settings.safetyMonths || 0) * 30.4; }
+function estOnHand(item){
+  const c = D.parse(item.countedAt) || TODAY;
+  if (c >= TODAY) return +item.onHand || 0;
+  return Math.max(0, (+item.onHand || 0) - usageBetween(profile(item), c, TODAY));
+}
+function openOrders(){ return S.orders.filter(o => !['received','cancelled'].includes(o.status)); }
+function expectedArrival(o){ return D.parse(o.expectedDate) || D.addDays(D.parse(o.requestDate) || TODAY, leadDays()); }
+function incomingFor(item){
+  const arr = [];
+  openOrders().forEach(o => o.lines.forEach(l => { if (l.itemId === item.id && +l.qty > 0) arr.push({date: expectedArrival(o), qty:+l.qty, order:o}); }));
+  return arr.sort((a,b) => a.date - b.date);
+}
+/* walk forward month-segment by month-segment; returns run-out date (or null) and monthly points */
+function project(item, opts = {}){
+  const prof = opts.prof || profile(item);
+  let q = opts.start != null ? opts.start : estOnHand(item);
+  const arrivals = (opts.arrivals || incomingFor(item)).map(a => ({...a})).sort((a,b) => a.date - b.date);
+  const months = opts.months || 24, end = D.addMonths(TODAY, months);
+  const pts = [{x:TODAY, y:q}]; let d = new Date(TODAY), runout = null, ai = 0;
+  let firstOut = null;
+  const applyArr = until => { while (ai < arrivals.length && arrivals[ai].date <= until){ if (q < 0) q = 0; const ad = arrivals[ai].date; if (ad > TODAY && ad <= end) pts.push({x:new Date(ad), y:q}); q += arrivals[ai].qty; if (ad > TODAY && ad <= end) pts.push({x:new Date(ad), y:q}); if (q > 0) runout = null; ai++; } };
+  applyArr(d);
+  const limit = D.addMonths(TODAY, 72);
+  while (d < limit){
+    const nx = new Date(d.getFullYear(), d.getMonth()+1, 1);
+    const nextArr = ai < arrivals.length ? arrivals[ai].date : null;
+    const segEnd = nextArr && nextArr < nx && nextArr > d ? nextArr : nx;
+    const rate = prof[d.getMonth()] / D.dim(d), days = (segEnd - d)/DAY;
+    if (!runout && rate > 0 && q > 0 && q - rate*days <= 0){ runout = D.addDays(d, Math.max(0, q / rate)); if (!firstOut) firstOut = runout; }
+    if (!runout && q <= 0 && rate > 0){ runout = new Date(d); if (!firstOut) firstOut = runout; }
+    q -= rate*days; d = segEnd;
+    applyArr(d);
+    if (d <= end && d.getDate() === 1) pts.push({x:new Date(d), y:Math.max(0,q)});
+    if (runout && ai >= arrivals.length && d > end) break;
+  }
+  return { runout, firstOut, pts };
+}
+function statusOf(item){
+  if (!item.code || item.basis === 'none') return {cls:'muted', txt:'Manual', key:4};
+  const yr = annual(item);
+  if (yr < 0.5) return {cls:'muted', txt:'No recent use', key:3};
+  const pr = project(item);
+  if (!pr.runout) return {cls:'good', txt:'OK', key:2, pr};
+  const ob = D.addDays(pr.runout, -leadDays() - safetyDays());
+  if (ob <= TODAY) return {cls:'crit', txt:'Order now', key:0, pr, ob};
+  if (ob <= D.addDays(TODAY, +S.settings.warnDays || 60)) return {cls:'warn', txt:'Order soon', key:1, pr, ob};
+  return {cls:'good', txt:'OK', key:2, pr, ob};
+}
+function monthsOfSupply(item){ const yr = annual(item); if (yr < 0.5) return null; return (estOnHand(item) + incomingFor(item).reduce((a,b) => a+b.qty, 0)) / (yr/12); }
+function suggestedQty(item, cover){
+  if (!item.code || item.basis === 'none') return 0;
+  const yr = annual(item); if (yr < 0.5) return 0;
+  cover = cover ?? +S.settings.coverMonths;
+  const arrive = D.addDays(TODAY, leadDays());
+  const need = usageBetween(profile(item), TODAY, D.addMonths(arrive, cover)) + yr/12*(+S.settings.safetyMonths||0)
+    - estOnHand(item) - incomingFor(item).reduce((a,b) => a+b.qty, 0);
+  if (need <= 0) return 0;
+  const r = Math.max(1, +S.settings.roundTo || 1);
+  return Math.max(Math.ceil(need / r) * r, +S.settings.minQty || 0);
+}
+function nextStart(item){ const n = numOf(item.endNum); return n == null ? null : n + 1; }
+function lastIssued(item){ const u = S.usage[item.code]; return u && u.last ? u.last : null; }
+function impliedOnHand(item){ const l = lastIssued(item), e = numOf(item.endNum); if (!l || e == null || item.basis !== 'phys') return null; return e - l[0]; }
+const basisLabel = b => b === 'all' ? 'all issues' : b === 'phys' ? 'tag #s in stock range' : 'manual';
+
+/* ================= charts (inline SVG) ================= */
+function lineChart({series, markers = [], height = 300, yLabel = ''}){
+  const W = 1200, H = height, L = 52, R = 14, T = 12, B = 30;
+  const xs = series.flatMap(s => s.pts.map(p => +p.x)), ys = series.flatMap(s => s.pts.map(p => p.y));
+  if (!xs.length) return '<div class="empty">No data</div>';
+  const x0 = Math.min(...xs), x1 = Math.max(...xs); let y1 = Math.max(10, ...ys) * 1.08;
+  const step = niceStep(y1 / 4); y1 = Math.ceil(y1 / step) * step;
+  const X = v => L + (v - x0) / (x1 - x0 || 1) * (W - L - R), Y = v => T + (1 - v / y1) * (H - T - B);
+  let g = '';
+  for (let v = 0; v <= y1 + 1e-9; v += step) g += `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef0f3"/><text x="${L-8}" y="${Y(v)+4}" text-anchor="end">${fmtN(v)}</text>`;
+  const d0 = new Date(x0); let d = new Date(d0.getFullYear(), d0.getMonth()+1, 1), i = 0;
+  while (+d <= x1){ if (d.getMonth() % 3 === 0) g += `<line x1="${X(+d)}" x2="${X(+d)}" y1="${T}" y2="${H-B}" stroke="#f3f4f7"/><text x="${X(+d)}" y="${H-B+16}" text-anchor="middle">${d.toLocaleDateString('en-US',{month:'short'})} ’${String(d.getFullYear()).slice(2)}</text>`; d = new Date(d.getFullYear(), d.getMonth()+1, 1); if (++i > 200) break; }
+  markers.forEach(m => { if (+m.x < x0 || +m.x > x1) return; g += `<line x1="${X(+m.x)}" x2="${X(+m.x)}" y1="${T}" y2="${H-B}" stroke="${m.color}" stroke-dasharray="3 3"/><text x="${X(+m.x)+4}" y="${T+10+(m.dy||0)}" style="fill:${m.color};font-weight:600">${esc(m.label)}</text>`; });
+  series.forEach(s => { const p = s.pts.map(pt => `${X(+pt.x).toFixed(1)},${Y(pt.y).toFixed(1)}`).join(' '); g += `<polyline points="${p}" fill="none" stroke="${s.color}" stroke-width="2.5" ${s.dash?'stroke-dasharray="6 4"':''} stroke-linejoin="round"/>`; });
+  g += `<line x1="${L}" x2="${W-R}" y1="${Y(0)}" y2="${Y(0)}" stroke="#c9cfd8"/>`;
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${g}</svg></div><div class="legend">${series.map(s => `<span><i class="${s.dash?'dash':''}" style="border-color:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`;
+}
+function niceStep(v){ const p = Math.pow(10, Math.floor(Math.log10(Math.max(v,1)))); const f = v / p; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * p; }
+function hbarChart(rows, {mark, markLabel, max}){
+  const W = 760, rowH = 26, L = 150, R = 60, H = rows.length * rowH + 26;
+  const mx = max || Math.max(mark || 0, ...rows.map(r => r.v || 0), 1) * 1.05;
+  const X = v => L + Math.min(v, mx) / mx * (W - L - R);
+  let g = '';
+  rows.forEach((r, i) => {
+    const y = i * rowH + 4;
+    g += `<text x="${L-8}" y="${y+15}" text-anchor="end">${esc(r.label)}</text>`;
+    g += `<rect x="${L}" y="${y+3}" width="${Math.max(2, X(r.v||0)-L)}" height="${rowH-9}" rx="3" fill="${r.color}"/>`;
+    g += `<text x="${X(r.v||0)+6}" y="${y+15}">${r.v == null ? 'n/a' : (r.v > mx ? '> ' + Math.round(mx) : r.v.toFixed(1)) + ' mo'}</text>`;
+  });
+  if (mark) g += `<line x1="${X(mark)}" x2="${X(mark)}" y1="0" y2="${H-22}" stroke="#c0392b" stroke-dasharray="4 3"/><text x="${X(mark)}" y="${H-6}" text-anchor="middle" style="fill:#c0392b;font-weight:600">${esc(markLabel)}</text>`;
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${g}</svg></div>`;
+}
+function colChart(vals, labels, {color = '#2f6fed', line = null, lineColor = '#c9a227', height = 280}){
+  const W = 1200, H = height, L = 44, R = 10, T = 10, B = 30, n = vals.length;
+  let y1 = Math.max(5, ...vals, ...(line || [])) * 1.1; const step = niceStep(y1/4); y1 = Math.ceil(y1/step)*step;
+  const bw = (W - L - R) / n, Y = v => T + (1 - v / y1) * (H - T - B);
+  let g = '';
+  for (let v = 0; v <= y1 + 1e-9; v += step) g += `<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="#eef0f3"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end">${fmtN(v)}</text>`;
+  vals.forEach((v, i) => { const x = L + i*bw; g += `<rect x="${x+bw*0.15}" y="${Y(v)}" width="${bw*0.7}" height="${Y(0)-Y(v)}" rx="2" fill="${color}"><title>${esc(labels[i])}: ${fmtN(v)}</title></rect>`; if (n <= 14 || i % Math.ceil(n/12) === 0) g += `<text x="${x+bw/2}" y="${H-B+15}" text-anchor="middle">${esc(labels[i])}</text>`; });
+  if (line) g += `<polyline points="${line.map((v,i) => `${L+i*bw+bw/2},${Y(v)}`).join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2.5"/>`;
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}">${g}</svg></div>`;
+}
+
+/* ================= navigation ================= */
+let VIEW = 'dashboard';
+document.getElementById('nav').addEventListener('click', e => { const b = e.target.closest('button[data-view]'); if (b) go(b.dataset.view); });
+function go(v){ VIEW = v; document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.view === v)); document.querySelectorAll('.view').forEach(el => el.classList.toggle('active', el.id === 'view-' + v)); render(); window.scrollTo(0,0); }
+function render(){ ({dashboard:renderDash, inventory:renderInv, planner:renderPlan, quote:renderQuote, orders:renderOrders, history:renderHist, settings:renderSettings})[VIEW](); }
+function activeItems(){ return S.items.filter(i => i.active !== false); }
+
+/* ================= DASHBOARD ================= */
+function renderDash(){
+  const items = activeItems();
+  const st = items.map(i => ({i, s:statusOf(i), yr:annual(i), mos:monthsOfSupply(i)}));
+  const crit = st.filter(x => x.s.key === 0), warn = st.filter(x => x.s.key === 1);
+  const withOb = st.filter(x => x.s.ob).sort((a,b) => a.s.ob - b.s.ob);
+  const nextOb = withOb[0];
+  const fys = histFYs();
+  st.sort((a,b) => a.s.key - b.s.key || ((a.s.ob||Infinity) - (b.s.ob||Infinity)));
+  const oo = openOrders();
+  const leadMo = (leadDays() + safetyDays()) / 30.4;
+  const el = document.getElementById('view-dashboard');
+  el.innerHTML = `
+    <div class="cards">
+      <div class="card"><div class="num">${fmtN(items.reduce((a,i) => a + (+i.onHand||0), 0))}</div><div class="lbl">Hangtags on hand (${items.length} types)</div></div>
+      <div class="card ${crit.length?'bad':'good'}"><div class="num">${crit.length}</div><div class="lbl">Need to order now</div></div>
+      <div class="card ${warn.length?'warn':'good'}"><div class="num">${warn.length}</div><div class="lbl">Order within ${S.settings.warnDays} days</div></div>
+      <div class="card"><div class="num sm">${nextOb ? D.fmt(nextOb.s.ob) : '—'}</div><div class="lbl">Next order-by date${nextOb ? ' · ' + esc(nextOb.i.code) : ''}</div></div>
+      <div class="card"><div class="num">${oo.length}</div><div class="lbl">Open orders</div></div>
+    </div>
+    <div class="panel">
+      <h2>Stock status</h2>
+      <p class="psub">Usage is the FY${String(fys[0]).slice(2)}–FY${String(fys[fys.length-1]).slice(2)} average by month (seasonal), from Issue History. Order-by = run-out date minus ${Math.round(leadDays()/7)} weeks lead time and ${S.settings.safetyMonths} months safety stock.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Hangtag</th><th class="n">On hand</th><th class="n">Used / yr</th><th class="n">Months left</th><th>Runs out</th><th>Order by</th><th>Status</th><th>Number check</th></tr></thead>
+        <tbody>${st.map(({i,s,yr,mos}) => {
+          const imp = impliedOnHand(i), est = estOnHand(i), inc = incomingFor(i).reduce((a,b)=>a+b.qty,0);
+          let chk = '<span class="muted small">—</span>';
+          if (imp != null){ const diff = (+i.onHand||0) - imp; chk = Math.abs(diff) <= Math.max(10, imp*0.05) ? `<span class="chip good" title="Ending # minus last tag # issued = ${fmtN(imp)}">✓ ${fmtN(imp)} by #</span>` : `<span class="chip warn" title="Ending # ${esc(i.endNum)} minus last tag # issued (${esc(tagNo(i, lastIssued(i)[0]))}) = ${fmtN(imp)}">${fmtN(imp)} by # (${diff>0?'+':''}${fmtN(diff)})</span>`; }
+          return `<tr>
+            <td>${tagCell(i, i.code ? basisLabel(i.basis) : '')}</td>
+            <td class="n">${fmtN(est)}${Math.round(est) !== +i.onHand ? '<div class="small muted">est.</div>' : ''}${inc ? `<div class="small" style="color:var(--blue)">+${fmtN(inc)} on order</div>` : ''}</td>
+            <td class="n">${i.code && i.basis!=='none' ? fmtN(yr) : '—'}</td>
+            <td class="n">${mos == null ? '—' : mos > 99 ? '99+' : mos.toFixed(1)}</td>
+            <td>${s.pr && s.pr.runout ? D.short(s.pr.runout) : (s.pr ? '6+ yrs' : '—')}</td>
+            <td>${s.ob ? D.fmt(s.ob) : '—'}</td>
+            <td><span class="chip ${s.cls}">${s.txt}</span></td>
+            <td>${chk}</td></tr>`; }).join('')}
+        </tbody></table></div>
+      <div class="btnrow"><button class="btn" onclick="planDue()">Plan an order for what's due →</button><button class="btn secondary" onclick="go('inventory')">Update counts</button></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h2>Months of supply</h2><p class="psub">On hand plus anything on order. The red line is lead time plus safety stock (${leadMo.toFixed(1)} months) — bars short of it should be ordered now.</p>
+        ${hbarChart(st.filter(x => x.mos != null).sort((a,b) => a.mos - b.mos).map(x => ({label:x.i.code + ' ' + x.i.name, v:x.mos, color: x.s.key===0 ? '#c0392b' : x.s.key===1 ? '#d39b2a' : '#2f6fed'})), {mark:leadMo, markLabel:'lead + safety', max:36})}
+      </div>
+      <div class="panel"><h2>Open orders</h2>
+        ${oo.length ? oo.map(o => `<div class="order"><div class="top"><div><div class="ttl">${esc(o.lines.map(l => fmtN(l.qty)+' '+l.code).join(', '))}</div><div class="meta">${esc(o.vendor)} · requested ${D.fmt(o.requestDate)}${o.estimateNo?' · Est. #'+esc(o.estimateNo):''}</div></div><span class="chip info">${esc(STATUS_LABEL[o.status])}</span></div><div class="meta">Expected ${D.fmt(expectedArrival(o))}</div></div>`).join('') : '<div class="empty">No open orders.</div>'}
+        <p class="psub" style="margin-top:12px">Last restock: ${(() => { const r = S.orders.filter(o => o.status==='received').sort((a,b) => (b.requestDate||'').localeCompare(a.requestDate||''))[0]; return r ? esc(r.lines.map(l => fmtN(l.qty)+' '+l.code).join(' + ')) + ' · ' + fmt$(+r.amount + +(r.freight||0)) + ' · job ' + esc(r.jobNo||'—') : 'none logged'; })()}</p>
+      </div>
+    </div>`;
+}
+function planDue(){
+  const win = D.addMonths(TODAY, 6);
+  S.plan.qty = {};
+  activeItems().forEach(i => { const s = statusOf(i); if (s.ob && s.ob <= win){ const q = suggestedQty(i); if (q > 0) S.plan.qty[i.id] = q; } });
+  planFocus = null; save(); go('planner');
+}
+
+/* ================= INVENTORY ================= */
+function renderInv(){
+  const el = document.getElementById('view-inventory');
+  const items = S.items;
+  el.innerHTML = `
+    <div class="panel">
+      <div class="toolbar"><div><h2>Hangtag inventory</h2><p class="psub" style="margin:0">Type a new count in <b>On hand</b> to log it. <b>Ending #</b> is the last number in the stock on the shelf — the next order starts at Ending # + 1.</p></div><div class="spacer"></div>
+        <label class="inl">Count date <input type="date" id="countDate" value="${D.iso(TODAY)}"></label>
+        <button class="btn secondary" onclick="editItem()">+ Add hangtag</button></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Hangtag</th><th>Color</th><th class="n">On hand</th><th>Counted</th><th>Ending #</th><th>Last job ID</th><th>Last # issued</th><th class="n">Implied by #</th><th>Usage from</th><th></th></tr></thead>
+        <tbody>${items.map(i => {
+          const l = lastIssued(i), imp = impliedOnHand(i);
+          return `<tr style="${i.active===false?'opacity:.5':''}">
+            <td>${tagCell(i)}</td>
+            <td>${esc(i.color||'')}</td>
+            <td class="n"><input class="ci num" type="number" min="0" value="${esc(i.onHand)}" onchange="setCount('${i.id}', this.value)"></td>
+            <td class="small">${D.fmt(i.countedAt)}</td>
+            <td><input class="ci mono" style="width:110px" value="${esc(i.endNum)}" onchange="setField('${i.id}','endNum',this.value.trim().toUpperCase())"></td>
+            <td><input class="ci mono" style="width:90px" value="${esc(i.jobId)}" placeholder="unknown" onchange="setField('${i.id}','jobId',this.value.trim())"></td>
+            <td class="small">${l ? `<span class="mono">${esc(tagNo(i, l[0]))}</span><div class="muted">${D.fmt(l[1])}</div>` : '—'}</td>
+            <td class="n">${imp == null ? '—' : fmtN(imp)}</td>
+            <td>${i.code ? `<select class="ci" onchange="setField('${i.id}','basis',this.value)">
+                <option value="phys" ${i.basis==='phys'?'selected':''}>Tag #s in stock range</option>
+                <option value="all" ${i.basis==='all'?'selected':''}>All issues of code</option>
+                <option value="none" ${i.basis==='none'?'selected':''}>Manual (no forecast)</option></select>` : '<span class="muted small">no permit code</span>'}</td>
+            <td><button class="btn secondary small" onclick="editItem('${i.id}')">Edit</button></td></tr>`; }).join('')}</tbody>
+        <tfoot><tr><td colspan="2">Total</td><td class="n">${fmtN(items.reduce((a,i)=>a+(+i.onHand||0),0))}</td><td colspan="7"></td></tr></tfoot>
+      </table></div>
+      <div class="note" style="margin-top:14px"><b>Usage from:</b> “Tag #s in stock range” counts each physical tag number (CODE + digits up to the Ending #) the first time it’s issued, so re-issues of the same tag and system-generated numbers like HC278031 or VP270206 are ignored. “All issues” counts every record for the code — use it where the issued number doesn’t match the printed tag. <b>Implied by #</b> = Ending # minus the highest tag number issued recently; a big gap from your count usually means tags were skipped, damaged, or issued out of order.</div>
+    </div>
+    <div class="panel">
+      <h2>Inventory log</h2><p class="psub">Counts, deliveries and adjustments.</p>
+      <div class="toolbar"><button class="btn secondary small" onclick="adjustModal()">+ Record adjustment (damaged, voided, found)</button></div>
+      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Hangtag</th><th>Type</th><th class="n">Change</th><th class="n">New on hand</th><th>Note</th></tr></thead>
+      <tbody>${S.ledger.slice().sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.ts||0)-(a.ts||0)).slice(0,80).map(l => { const it = itemById(l.itemId);
+        return `<tr><td class="small">${D.fmt(l.date)}</td><td>${it ? `<span class="code">${esc(it.code||it.name)}</span>` : '<span class="muted">—</span>'}</td><td>${esc({count:'Count',receive:'Received',adjust:'Adjustment',note:'Note'}[l.kind]||l.kind)}</td>
+        <td class="n">${l.delta != null ? (l.delta>0?'+':'') + fmtN(l.delta) : ''}</td><td class="n">${l.to != null ? fmtN(l.to) : ''}</td><td class="small">${esc(l.note||'')}</td></tr>`; }).join('') || '<tr><td colspan="6" class="empty">No entries yet.</td></tr>'}</tbody></table></div>
+    </div>`;
+}
+function setCount(id, v){
+  const i = itemById(id); const to = Math.max(0, parseInt(v,10) || 0); const from = +i.onHand || 0;
+  const date = (document.getElementById('countDate') || {}).value || D.iso(TODAY);
+  i.onHand = to; i.countedAt = date;
+  S.ledger.push({id:uid(), ts:Date.now(), date, itemId:id, kind:'count', from, to, delta:to-from, note:'Physical count'});
+  save(); renderInv(); toast(`${i.code||i.name}: count ${fmtN(to)} saved`);
+}
+function setField(id, k, v){ const i = itemById(id); i[k] = v; save(); render(); }
+function adjustModal(){
+  openModal(`<h2>Record adjustment</h2><div class="modal-sub">Damaged, voided, given out in bulk, or found stock. Use a negative number to remove tags.</div>
+    <div class="form-grid">
+      <div class="field"><label>Hangtag</label><select id="adjItem">${S.items.map(i => `<option value="${i.id}">${esc((i.code?i.code+' — ':'')+i.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Change (+/−)</label><input id="adjQty" type="number" value="-10"></div>
+      <div class="field"><label>Date</label><input id="adjDate" type="date" value="${D.iso(TODAY)}"></div>
+      <div class="field"><label>Note</label><input id="adjNote" placeholder="e.g. 25 damaged in shipment"></div>
+    </div>
+    <div class="modal-footer"><span></span><div><button class="btn secondary" onclick="closeModal()">Cancel</button> <button class="btn" onclick="saveAdjust()">Save</button></div></div>`);
+}
+function saveAdjust(){
+  const i = itemById(val('adjItem')), d = parseInt(val('adjQty'),10) || 0; const from = +i.onHand || 0;
+  i.onHand = Math.max(0, from + d);
+  S.ledger.push({id:uid(), ts:Date.now(), date:val('adjDate'), itemId:i.id, kind:'adjust', from, to:i.onHand, delta:i.onHand-from, note:val('adjNote')});
+  save(); closeModal(); render(); toast('Adjustment saved');
+}
+function editItem(id){
+  const i = id ? itemById(id) : {id:'', name:'', code:'', jobId:'', endNum:'', onHand:0, countedAt:D.iso(TODAY), color:'', hex:'#cccccc', basis:'phys', type:'Long', material:'Hangtuf', pad:5, active:true, notes:''};
+  openModal(`<h2>${id ? 'Edit' : 'Add'} hangtag</h2><div class="modal-sub">The permit code must match the Decal Code in T2 so issue history lines up.</div>
+    <div class="form-grid three">
+      <div class="field"><label>Name</label><input id="f_name" value="${esc(i.name)}"></div>
+      <div class="field"><label>Permit code</label><input id="f_code" value="${esc(i.code)}" placeholder="e.g. VV"></div>
+      <div class="field"><label>Color</label><input id="f_color" value="${esc(i.color)}"></div>
+      <div class="field"><label>Swatch</label><input id="f_hex" type="color" value="${esc(i.hex||'#cccccc')}" style="height:38px;padding:3px"></div>
+      <div class="field"><label>Type</label><input id="f_type" value="${esc(i.type)}"></div>
+      <div class="field"><label>Material</label><input id="f_material" value="${esc(i.material)}"></div>
+      <div class="field"><label>Ending # (last in stock)</label><input id="f_end" class="mono" value="${esc(i.endNum)}"></div>
+      <div class="field"><label>Digits after prefix</label><input id="f_pad" type="number" min="1" max="8" value="${esc(i.pad||5)}"></div>
+      <div class="field"><label>Last job ID</label><input id="f_job" value="${esc(i.jobId)}"></div>
+      ${id ? '' : `<div class="field"><label>On hand</label><input id="f_onhand" type="number" value="0"></div>`}
+      <div class="field full"><label>Notes</label><textarea id="f_notes">${esc(i.notes)}</textarea></div>
+      <div class="field"><label><input type="checkbox" id="f_active" ${i.active!==false?'checked':''} style="width:auto"> Active (show in planner)</label></div>
+    </div>
+    <div class="modal-footer">${id ? `<button class="btn danger" onclick="deleteItem('${id}')">Delete</button>` : '<span></span>'}<div><button class="btn secondary" onclick="closeModal()">Cancel</button> <button class="btn" onclick="saveItem('${id}')">Save</button></div></div>`);
+}
+function saveItem(id){
+  const i = id ? itemById(id) : {id:uid(), basis:'phys', countedAt:D.iso(TODAY)};
+  Object.assign(i, {name:val('f_name').trim(), code:val('f_code').trim().toUpperCase(), color:val('f_color').trim(), hex:val('f_hex'), type:val('f_type').trim(), material:val('f_material').trim(),
+    endNum:val('f_end').trim().toUpperCase(), pad:parseInt(val('f_pad'),10)||5, jobId:val('f_job').trim(), notes:val('f_notes'), active:document.getElementById('f_active').checked});
+  if (!i.name){ toast('Name is required'); return; }
+  if (!id){ i.onHand = parseInt(val('f_onhand'),10)||0; if (!i.code) i.basis = 'none'; S.items.push(i); }
+  save(); closeModal(); render(); toast('Saved');
+}
+function deleteItem(id){ if (!confirmBox('Delete this hangtag type? Its history stays in Issue History.')) return; S.items = S.items.filter(i => i.id !== id); save(); closeModal(); render(); }
+
+/* ================= ORDER PLANNER ================= */
+let planFocus = null;
+function planLines(){
+  return activeItems().filter(i => +S.plan.qty[i.id] > 0).map(i => {
+    const qty = +S.plan.qty[i.id], st = nextStart(i);
+    return {itemId:i.id, code:i.code, qty, start:tagNo(i, st), end:st != null ? tagNo(i, st + qty - 1) : '', lastJob:i.jobId, color:i.color, type:i.type, material:i.material};
+  });
+}
+function renderPlan(){
+  const el = document.getElementById('view-planner');
+  const items = activeItems().filter(i => i.code && i.basis !== 'none');
+  const arrive = D.addDays(TODAY, leadDays());
+  const lines = planLines(); const totQ = lines.reduce((a,l) => a + l.qty, 0);
+  const cost = totQ * (+S.settings.priceEach||0) + (totQ ? +S.settings.freight||0 : 0);
+  if (!planFocus || !itemById(planFocus)) planFocus = (lines[0] && lines[0].itemId) || (items[0] && items[0].id);
+  el.innerHTML = `
+    <div class="panel">
+      <div class="toolbar"><div><h2>Order planner</h2><p class="psub" style="margin:0">Enter quantities to see how long each hangtag lasts. An order placed today should arrive about <b>${D.fmt(arrive)}</b> (${S.settings.adminWeeks} wk quote/PO + ${S.settings.vendorWeeks} wk proof, production &amp; freight).</p></div></div>
+      <div class="toolbar">
+        <label class="inl">Cover <input type="number" id="pCover" min="1" max="60" value="${S.settings.coverMonths}" onchange="S.settings.coverMonths=+this.value||12;save();renderPlan()"> months after arrival</label>
+        <button class="btn secondary" onclick="fillSuggested(6)">Fill items due within 6 months</button>
+        <button class="btn secondary" onclick="fillSuggested(999)">Fill every suggestion</button>
+        <button class="btn secondary" onclick="S.plan.qty={};save();renderPlan()">Clear</button>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Hangtag</th><th class="n">On hand</th><th class="n">Used / yr</th><th>Runs out</th><th>Order by</th><th class="n">Suggested</th><th class="n">Order qty</th><th>Numbers</th><th>Lasts until (with order)</th><th></th></tr></thead>
+        <tbody>${items.map(i => {
+          const s = statusOf(i), sug = suggestedQty(i), q = +S.plan.qty[i.id] || 0, st = nextStart(i);
+          let lasts = '';
+          if (q > 0){ const pr = project(i, {arrivals:[...incomingFor(i), {date:arrive, qty:q}], months:72}); lasts = pr.runout ? D.short(pr.runout) : 'beyond 6 yrs'; if (pr.firstOut && pr.firstOut < arrive) lasts += ' <span class="chip crit" title="Current stock runs out before this order would arrive">gap</span>'; }
+          return `<tr ${planFocus===i.id?'style="background:#f5f8ff"':''}>
+            <td>${tagCell(i)}</td><td class="n">${fmtN(estOnHand(i))}</td><td class="n">${fmtN(annual(i))}</td>
+            <td>${s.pr && s.pr.runout ? D.short(s.pr.runout) : (s.pr ? '6+ yrs' : '—')}</td><td>${s.ob ? `<span class="chip ${s.cls}">${D.fmt(s.ob)}</span>` : '—'}</td>
+            <td class="n">${sug ? `<a href="#" onclick="setPlan('${i.id}',${sug});return false" title="Use suggestion">${fmtN(sug)}</a>` : '<span class="muted">0</span>'}</td>
+            <td class="n"><input class="ci num" type="number" min="0" step="50" value="${q||''}" placeholder="0" onchange="setPlan('${i.id}',this.value)"></td>
+            <td class="small mono">${q > 0 && st != null ? esc(tagNo(i,st)) + '–' + esc(tagNo(i, st+q-1)) : ''}</td>
+            <td>${lasts}</td>
+            <td><button class="btn secondary small" onclick="planFocus='${i.id}';renderPlan()">Chart</button></td></tr>`; }).join('')}</tbody>
+        <tfoot><tr><td colspan="6">Total · est. ${fmt$(+S.settings.priceEach)}/tag + ${fmt$(+S.settings.freight)} freight</td><td class="n">${fmtN(totQ)}</td><td colspan="3">${totQ ? 'Est. ' + fmt$(cost) : ''}</td></tr></tfoot>
+      </table></div>
+      <div class="btnrow"><button class="btn" ${lines.length?'':'disabled'} onclick="toQuote()">Draft quote request for these ${lines.length || ''} →</button></div>
+    </div>
+    ${planFocus ? planChart(itemById(planFocus), arrive) : ''}`;
+}
+function planChart(i, arrive){
+  const q = +S.plan.qty[i.id] || 0;
+  const base = project(i, {months:30});
+  const series = [{name:'Current stock' + (incomingFor(i).length ? ' + open orders' : ''), color:'#8892a0', dash:true, pts:base.pts}];
+  if (q > 0) series.push({name:`With ${fmtN(q)} more arriving ${D.fmt(arrive)}`, color:'#2f6fed', pts:project(i, {arrivals:[...incomingFor(i), {date:arrive, qty:q}], months:30}).pts});
+  const s = statusOf(i), markers = [{x:arrive, label:'arrives', color:'#2f6fed'}];
+  if (s.ob) markers.push({x:s.ob, label:'order by', color:'#c0392b', dy:14});
+  const p = profile(i);
+  return `<div class="panel"><h2>${esc(i.code)} ${esc(i.name)} — projected stock</h2><p class="psub">Seasonal usage, ${fmtN(annual(i))}/yr. Busiest months: ${p.map((v,m) => [v,m]).sort((a,b)=>b[0]-a[0]).slice(0,3).map(([v,m]) => new Date(2000,m,1).toLocaleDateString('en-US',{month:'short'}) + ' (' + fmtN(v) + ')').join(', ')}.</p>
+    ${lineChart({series, markers})}</div>`;
+}
+function setPlan(id, v){ const n = Math.max(0, parseInt(v,10) || 0); if (n) S.plan.qty[id] = n; else delete S.plan.qty[id]; planFocus = id; save(); renderPlan(); }
+function fillSuggested(months){
+  const win = D.addMonths(TODAY, months);
+  activeItems().forEach(i => { const s = statusOf(i), q = suggestedQty(i); if (q > 0 && (months >= 999 || (s.ob && s.ob <= win))) S.plan.qty[i.id] = q; });
+  save(); renderPlan();
+}
+function toQuote(){ S.draft.lines = planLines(); save(); go('quote'); }
+
+/* ================= QUOTE REQUEST ================= */
+function draftLines(){
+  return S.draft.lines.map(l => {
+    const i = itemById(l.itemId) || {};
+    const st = l.startOverride || (nextStart(i) != null ? tagNo(i, nextStart(i)) : l.start);
+    return {...l, code:i.code || l.code, start:st, end: numOf(st) != null ? tagNo(i, numOf(st) + (+l.qty) - 1) : '', lastJob: l.jobOverride ?? (i.jobId || ''), color:i.color || l.color, type:i.type || l.type, material:i.material || l.material};
+  });
+}
+function quoteEmail(lines){
+  const s = S.settings, fy = 'FY' + String(fyOf(TODAY)).slice(2);
+  const subject = s.quoteSubject.replace('{FY}', fy);
+  const cols = ['Hangtag Code','To Order','Last Job ID','Color','Type','Material','Starting Number'];
+  const vals = l => [l.code, fmtN(l.qty), l.lastJob || 'Unknown', l.color, l.type, l.material, l.start];
+  const sigH = s.sender.includeSig ? '<br><br>' + esc(s.sender.sig).replace(/\n/g,'<br>') : '';
+  const sigT = s.sender.includeSig ? '\n\n' + s.sender.sig : '';
+  const html = `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">Hi ${esc(s.vendor.contactFirst)},<br><br>${esc(s.quoteIntro)}<br><br>`
+    + `<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:11pt"><thead><tr>${cols.map(c => `<th style="border:1px solid #999;padding:4px 10px;background:#f2f2f2;text-align:left">${c}</th>`).join('')}</tr></thead><tbody>`
+    + lines.map(l => `<tr>${vals(l).map((v,k) => `<td style="border:1px solid #999;padding:4px 10px;${k===1?'text-align:right':''}">${esc(v)}</td>`).join('')}</tr>`).join('')
+    + `</tbody></table><br>Thank you,<br><br>-${esc(s.sender.first)}${sigH}</div>`;
+  const w = cols.map((c,k) => Math.max(c.length, ...lines.map(l => String(vals(l)[k]).length)));
+  const row = a => a.map((v,k) => String(v).padEnd(w[k])).join('   ');
+  const text = `Hi ${s.vendor.contactFirst},\n\n${s.quoteIntro}\n\n${row(cols)}\n${lines.map(l => row(vals(l))).join('\n')}\n\nThank you,\n\n-${s.sender.first}${sigT}`;
+  return {to:s.vendor.to, cc:s.vendor.cc, subject, html, text};
+}
+function renderQuote(){
+  const el = document.getElementById('view-quote');
+  const lines = draftLines();
+  const used = new Set(lines.map(l => l.itemId));
+  const em = quoteEmail(lines);
+  const tot = lines.reduce((a,l) => a + (+l.qty), 0);
+  el.innerHTML = `
+    <div class="panel">
+      <h2>Quote request — ${esc(S.settings.vendor.company)}</h2>
+      <p class="psub">Lines come from the Order Planner, or add them here. Starting numbers continue from each hangtag's Ending #; Last Job ID tells the printer which artwork to reuse.</p>
+      ${lines.length ? `<div class="tablewrap"><table><thead><tr><th>Hangtag</th><th class="n">To order</th><th>Last job ID</th><th>Starting #</th><th>Ending #</th><th></th></tr></thead><tbody>
+        ${lines.map((l,k) => { const i = itemById(l.itemId) || l; return `<tr><td>${tagCell(i)}</td>
+          <td class="n"><input class="ci num" type="number" min="1" value="${l.qty}" onchange="setLine(${k},'qty',this.value)"></td>
+          <td><input class="ci mono" style="width:100px" value="${esc(l.lastJob)}" placeholder="Unknown" onchange="setLine(${k},'jobOverride',this.value.trim())"></td>
+          <td><input class="ci mono" style="width:110px" value="${esc(l.start)}" onchange="setLine(${k},'startOverride',this.value.trim().toUpperCase())"></td>
+          <td class="mono">${esc(l.end)}</td>
+          <td><button class="btn secondary small" onclick="S.draft.lines.splice(${k},1);save();renderQuote()">Remove</button></td></tr>`; }).join('')}
+        </tbody><tfoot><tr><td>Total</td><td class="n">${fmtN(tot)}</td><td colspan="4">Est. ${fmt$(tot * +S.settings.priceEach + +S.settings.freight)} at ${fmt$(+S.settings.priceEach)}/tag + freight</td></tr></tfoot></table></div>` : '<div class="empty">No lines yet — add one below or use the Order Planner.</div>'}
+      <div class="toolbar" style="margin-top:12px"><select id="addLineSel">${activeItems().filter(i => i.code && !used.has(i.id)).map(i => `<option value="${i.id}">${esc(i.code + ' — ' + i.name)}</option>`).join('')}</select>
+        <input type="number" id="addLineQty" value="500" min="1" style="width:90px"><button class="btn secondary" onclick="addLine()">+ Add line</button></div>
+    </div>
+    ${lines.length ? `<div class="panel">
+      <h2>Email</h2><p class="psub">“Copy email” copies the formatted version with the table — paste it into a new Outlook message.</p>
+      <div class="email">
+        <div class="hdr"><div><b>To</b> ${esc(em.to)}</div><div><b>Cc</b> ${esc(em.cc)}</div><div><b>Subject</b> ${esc(em.subject)}</div></div>
+        <div class="body">${em.html}</div>
+      </div>
+      <div class="btnrow">
+        <button class="btn" onclick="copyEmail()">Copy email</button>
+        <button class="btn secondary" onclick="copyText(quoteEmail(draftLines()).subject)">Copy subject</button>
+        <button class="btn secondary" onclick="copyText(quoteEmail(draftLines()).to + '; ' + quoteEmail(draftLines()).cc)">Copy recipients</button>
+        <button class="btn secondary" onclick="mailto()">Open in mail app</button>
+        <span class="spacer"></span>
+        <button class="btn" style="background:var(--green)" onclick="logRequest()">Log as sent → Orders</button>
+      </div></div>` : ''}`;
+}
+function setLine(k, f, v){ const l = S.draft.lines[k]; if (f === 'qty') l.qty = Math.max(1, parseInt(v,10)||1); else l[f] = v; save(); renderQuote(); }
+function addLine(){ const id = val('addLineSel'); if (!id) return; S.draft.lines.push({itemId:id, qty:Math.max(1, parseInt(val('addLineQty'),10)||1)}); save(); renderQuote(); }
+async function copyEmail(){
+  const em = quoteEmail(draftLines());
+  try { await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([em.html],{type:'text/html'}), 'text/plain':new Blob([em.text],{type:'text/plain'})})]); toast('Email copied — paste into Outlook'); return; } catch(e){}
+  const box = document.querySelector('.email .body'); const r = document.createRange(); r.selectNodeContents(box); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+  try { document.execCommand('copy'); toast('Email copied'); } catch(e){ toast('Select the email and copy manually'); } sel.removeAllRanges();
+}
+async function copyText(s){ try { await navigator.clipboard.writeText(s); toast('Copied'); } catch(e){ const t = document.createElement('textarea'); t.value = s; document.body.appendChild(t); t.select(); try{ document.execCommand('copy'); toast('Copied'); }catch(_){ toast('Copy failed'); } t.remove(); } }
+const addrs = s => String(s||'').split(/[;,]/).map(x => (x.match(/<([^>]+)>/) || [,x])[1].trim()).filter(Boolean).join(',');
+function mailto(){ const em = quoteEmail(draftLines()); location.href = `mailto:${addrs(em.to)}?cc=${encodeURIComponent(addrs(em.cc))}&subject=${encodeURIComponent(em.subject)}&body=${encodeURIComponent(em.text)}`; }
+function logRequest(){
+  const lines = draftLines().map(l => ({itemId:l.itemId, code:l.code, qty:+l.qty, start:l.start, end:l.end, lastJob:l.lastJob, color:l.color, type:l.type, material:l.material}));
+  if (!lines.length) return;
+  S.orders.push({id:uid(), vendor:S.settings.vendor.company, status:'requested', requestDate:D.iso(TODAY), quoteDate:'', estimateNo:'', amount:'', freight:'', poNo:'', invoiceNo:'', invoiceDate:'', jobNo:'', proofDate:'', shipDate:'', expectedDate:'', receivedDate:'', applied:false, lines, notes:''});
+  S.draft.lines = []; S.plan.qty = {}; save(); toast('Order logged as requested'); go('orders');
+}
+
+/* ================= ORDERS ================= */
+const STATUSES = ['requested','quoted','po','proof','production','shipped','received'];
+const STATUS_LABEL = {requested:'Quote requested', quoted:'Quote received', po:'PO opened', proof:'Proof approved', production:'In production', shipped:'Shipped', received:'Received', cancelled:'Cancelled'};
+function renderOrders(){
+  const el = document.getElementById('view-orders');
+  const list = S.orders.slice().sort((a,b) => (b.requestDate||'').localeCompare(a.requestDate||''));
+  el.innerHTML = `<div class="panel"><h2>Orders</h2><p class="psub">Open orders count as incoming stock on their expected date everywhere else in the planner. Marking an order received adds the tags to inventory and moves each hangtag's Ending # and Last Job ID forward.</p>
+    ${list.length ? list.map(o => {
+      const idx = STATUSES.indexOf(o.status), tq = o.lines.reduce((a,l)=>a+(+l.qty),0), tot = (+o.amount||0) + (+o.freight||0);
+      return `<div class="order"><div class="top"><div><div class="ttl">${esc(o.lines.map(l => fmtN(l.qty)+' '+l.code).join(' · '))} <span class="muted" style="font-weight:400">(${fmtN(tq)} tags)</span></div>
+        <div class="meta">${esc(o.vendor)} · requested ${D.fmt(o.requestDate)}${o.estimateNo?' · Est. #'+esc(o.estimateNo):''}${o.poNo?' · PO '+esc(o.poNo):''}${o.jobNo?' · Job '+esc(o.jobNo):''}${o.invoiceNo?' · Inv. '+esc(o.invoiceNo):''}
+        ${o.amount!=='' && o.amount!=null ? `<br>${fmt$(+o.amount)}${o.freight?' + '+fmt$(+o.freight)+' freight = <b>'+fmt$(tot)+'</b>':''} · ${fmt$((+o.amount||0)/tq)}/tag` : ''}
+        ${o.status==='received' ? `<br>Received ${o.receivedDate ? D.fmt(o.receivedDate) : ''}` : o.status==='cancelled' ? '' : `<br>Expected ${D.fmt(expectedArrival(o))}${o.expectedDate?'':' (est.)'}`}</div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${o.status!=='received' && o.status!=='cancelled' ? `<button class="btn small" style="background:var(--green)" onclick="receiveModal('${o.id}')">Receive into inventory</button>` : ''}
+          ${['quoted','po'].includes(o.status) || o.estimateNo ? `<button class="btn secondary small" onclick="poModal('${o.id}')">PO request email</button>` : ''}
+          <button class="btn secondary small" onclick="orderModal('${o.id}')">Edit</button></div></div>
+        ${o.status==='cancelled' ? '<div class="steps"><span class="cur">Cancelled</span></div>' : `<div class="steps">${STATUSES.map((s,k) => `<span class="${k<idx?'done':k===idx?'cur':''}">${STATUS_LABEL[s]}</span>`).join('')}</div>`}
+        <div class="tablewrap"><table><thead><tr><th>Code</th><th class="n">Qty</th><th>Numbers</th><th>Prev. job</th></tr></thead><tbody>${o.lines.map(l => `<tr><td class="code">${esc(l.code)}</td><td class="n">${fmtN(l.qty)}</td><td class="mono">${esc(l.start)}–${esc(l.end)}</td><td class="mono">${esc(l.lastJob||'')}</td></tr>`).join('')}</tbody></table></div>
+        ${o.notes ? `<div class="meta" style="margin-top:8px">${esc(o.notes)}</div>` : ''}</div>`; }).join('') : '<div class="empty">No orders yet.</div>'}</div>`;
+}
+function orderModal(id){
+  const o = S.orders.find(x => x.id === id);
+  const f = (k, label, type='text', hint='') => `<div class="field"><label>${label}</label><input id="o_${k}" type="${type}" value="${esc(o[k] ?? '')}" ${type==='number'?'step="0.01"':''}>${hint?`<div class="hint">${hint}</div>`:''}</div>`;
+  openModal(`<h2>Order details</h2><div class="modal-sub">${esc(o.lines.map(l => fmtN(l.qty)+' '+l.code).join(' · '))}</div>
+    <div class="form-grid three">
+      <div class="field"><label>Status</label><select id="o_status">${[...STATUSES,'cancelled'].map(s => `<option value="${s}" ${o.status===s?'selected':''} ${s==='received'&&!o.applied?'disabled':''}>${STATUS_LABEL[s]}</option>`).join('')}</select><div class="hint">Use “Receive into inventory” to mark received.</div></div>
+      ${f('vendor','Vendor')}${f('requestDate','Requested','date')}
+      ${f('quoteDate','Quote date','date')}${f('estimateNo','Estimate #')}${f('amount','Quote amount ($)','number')}
+      ${f('freight','Freight ($)','number')}${f('poNo','PO #')}${f('jobNo','Job #','text','Becomes the Last Job ID on receipt')}
+      ${f('proofDate','Proof approved','date')}${f('expectedDate','Expected arrival','date', 'Blank = request date + lead time')}${f('shipDate','Shipped','date')}
+      ${f('invoiceNo','Invoice #')}${f('invoiceDate','Invoice date','date')}${o.status==='received'?f('receivedDate','Received','date'):''}
+      <div class="field full"><label>Notes</label><textarea id="o_notes">${esc(o.notes||'')}</textarea></div>
+    </div>
+    <div class="tablewrap"><table><thead><tr><th>Code</th><th class="n">Qty</th><th>Starting #</th></tr></thead><tbody>${o.lines.map((l,k) => `<tr><td class="code">${esc(l.code)}</td><td class="n"><input class="ci num" id="ol_q${k}" type="number" value="${l.qty}" ${o.applied?'disabled':''}></td><td><input class="ci mono" id="ol_s${k}" value="${esc(l.start)}" ${o.applied?'disabled':''}></td></tr>`).join('')}</tbody></table></div>
+    <div class="modal-footer"><button class="btn danger" onclick="deleteOrder('${o.id}')">Delete order</button><div><button class="btn secondary" onclick="closeModal()">Cancel</button> <button class="btn" onclick="saveOrder('${o.id}')">Save</button></div></div>`);
+}
+function saveOrder(id){
+  const o = S.orders.find(x => x.id === id);
+  ['vendor','requestDate','quoteDate','estimateNo','poNo','jobNo','proofDate','expectedDate','shipDate','invoiceNo','invoiceDate','receivedDate','notes'].forEach(k => { const e = document.getElementById('o_'+k); if (e) o[k] = e.value; });
+  ['amount','freight'].forEach(k => { const v = document.getElementById('o_'+k).value; o[k] = v === '' ? '' : +v; });
+  const st = val('o_status'); if (st !== 'received' || o.applied) o.status = st;
+  if (o.proofDate && !o.expectedDate){ o.expectedDate = D.iso(addWorkdays(D.parse(o.proofDate), 30 + 5)); }
+  if (!o.applied) o.lines.forEach((l,k) => { const i = itemById(l.itemId) || {code:l.code, pad:5}; l.qty = Math.max(1, parseInt(val('ol_q'+k),10)||1); l.start = val('ol_s'+k).trim().toUpperCase(); const n = numOf(l.start); l.end = n != null ? tagNo(i, n + l.qty - 1) : ''; });
+  if (o.amount !== '' && o.status === 'requested') o.status = 'quoted';
+  save(); closeModal(); render(); toast('Order saved');
+}
+function addWorkdays(d, n){ let r = new Date(d); while (n > 0){ r = D.addDays(r, 1); if (r.getDay() !== 0 && r.getDay() !== 6) n--; } return r; }
+function deleteOrder(id){ if (!confirmBox('Delete this order? Inventory already received is not changed.')) return; S.orders = S.orders.filter(o => o.id !== id); save(); closeModal(); render(); }
+function receiveModal(id){
+  const o = S.orders.find(x => x.id === id);
+  openModal(`<h2>Receive order</h2><div class="modal-sub">Adds the received quantities to on-hand stock, sets each hangtag's Ending # to the last number received and its Last Job ID to this order's job #.</div>
+    <div class="form-grid"><div class="field"><label>Date received</label><input id="r_date" type="date" value="${D.iso(TODAY)}"></div><div class="field"><label>Job #</label><input id="r_job" value="${esc(o.jobNo||'')}"></div></div>
+    <div class="tablewrap" style="margin-top:12px"><table><thead><tr><th>Code</th><th class="n">Ordered</th><th class="n">Received</th><th>Last # received</th></tr></thead><tbody>
+    ${o.lines.map((l,k) => `<tr><td class="code">${esc(l.code)}</td><td class="n">${fmtN(l.qty)}</td><td class="n"><input class="ci num" id="r_q${k}" type="number" value="${l.qty}"></td><td><input class="ci mono" id="r_e${k}" value="${esc(l.end)}"></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="modal-footer"><span></span><div><button class="btn secondary" onclick="closeModal()">Cancel</button> <button class="btn" style="background:var(--green)" onclick="doReceive('${o.id}')">Receive</button></div></div>`);
+}
+function doReceive(id){
+  const o = S.orders.find(x => x.id === id), date = val('r_date'), job = val('r_job').trim();
+  o.lines.forEach((l,k) => {
+    const i = itemById(l.itemId); const q = parseInt(val('r_q'+k),10) || 0; const end = val('r_e'+k).trim().toUpperCase();
+    if (!i) return;
+    const from = +i.onHand || 0; i.onHand = from + q; if (end) i.endNum = end; if (job) i.jobId = job;
+    S.ledger.push({id:uid(), ts:Date.now(), date, itemId:i.id, kind:'receive', from, to:i.onHand, delta:q, note:`Order ${o.estimateNo?'Est. #'+o.estimateNo:''}${job?' job '+job:''} · ${l.start}–${end||l.end}`});
+    l.received = q;
+  });
+  o.status = 'received'; o.applied = true; o.receivedDate = date; if (job) o.jobNo = job;
+  const tq = o.lines.reduce((a,l) => a + (+l.qty), 0);
+  if (+o.amount > 0 && tq) S.settings.priceEach = Math.round(+o.amount / tq * 100) / 100;
+  if (+o.freight > 0) S.settings.freight = +o.freight;
+  save(); closeModal(); render(); toast('Received — inventory updated');
+}
+function poModal(id){
+  const o = S.orders.find(x => x.id === id), s = S.settings;
+  const tq = o.lines.reduce((a,l)=>a+(+l.qty),0), tot = (+o.amount||0) + (+o.freight||0);
+  const subject = `PO Request – ${s.vendor.company} – Parking Hangtags${o.estimateNo ? ' (Est. #' + o.estimateNo + ')' : ''}`;
+  const body = `Hi ${s.po.first},\n\nCould you please open a PO for the attached quote from ${s.vendor.company} for parking hangtags?\n\nVendor: ${s.vendor.company}${s.vendor.customerNo ? ' (Customer No. ' + s.vendor.customerNo + ')' : ''}\nEstimate #: ${o.estimateNo || '—'}${o.quoteDate ? ' (dated ' + D.slash(o.quoteDate) + ')' : ''}\nItems: ${o.lines.map(l => l.code + ' hangtags × ' + fmtN(l.qty)).join(', ')} (${fmtN(tq)} total)\nAmount: ${fmt$(+o.amount||0)}${o.freight ? ' + est. freight ' + fmt$(+o.freight) + ' = ' + fmt$(tot) : ' (freight not included)'}\n\nThank you,\n\n-${s.sender.first}`;
+  openModal(`<h2>PO request email</h2><div class="modal-sub">To ${esc(s.po.to || s.po.first + ' (set the address in Settings)')}</div>
+    <div class="field"><label>Subject</label><input id="po_subj" value="${esc(subject)}"></div>
+    <div class="field" style="margin-top:10px"><label>Body</label><textarea id="po_body" style="min-height:240px;font-family:Calibri,Arial,sans-serif;font-size:14px">${esc(body)}</textarea></div>
+    <div class="modal-footer"><button class="btn secondary" onclick="closeModal()">Close</button><div><button class="btn secondary" onclick="copyText(val('po_body'))">Copy body</button> <button class="btn secondary" onclick="copyText(val('po_subj'))">Copy subject</button>
+    <button class="btn" onclick="location.href='mailto:${encodeURIComponent(addrs(s.po.to))}?subject='+encodeURIComponent(val('po_subj'))+'&body='+encodeURIComponent(val('po_body'))">Open in mail app</button></div></div>`);
+}
+
+/* ================= ISSUE HISTORY ================= */
+let histBasis = 'item', histCode = null;
+function renderHist(){
+  const el = document.getElementById('view-history');
+  const m = S.usageMeta || {};
+  const items = activeItems().filter(i => i.code);
+  const allYm = new Set(); items.forEach(i => { const u = S.usage[i.code]; if (u) [...Object.keys(u.a||{}), ...Object.keys(u.p||{})].forEach(k => allYm.add(k)); });
+  const fySet = [...new Set([...allYm].map(k => { const [y,mo] = k.split('-').map(Number); return mo >= 7 ? y+1 : y; }))].sort();
+  const serFor = i => { const u = S.usage[i.code] || {}; const b = histBasis === 'item' ? (i.basis === 'all' ? 'a' : 'p') : histBasis; return u[b] || {}; };
+  const fyTot = (i, fy) => { const s = serFor(i); let t = 0; for (const k in s){ const [y,mo] = k.split('-').map(Number); if ((mo >= 7 ? y+1 : y) === fy) t += s[k]; } return t; };
+  const curFY = fyOf(TODAY), hf = histFYs();
+  if (!histCode || !items.find(i => i.code === histCode)) histCode = items[0] && items[0].code;
+  const hi = items.find(i => i.code === histCode);
+  let monthChart = '';
+  if (hi){
+    const s = serFor(hi), labels = [], vals = [];
+    for (let k = 35; k >= 0; k--){ const d = D.addMonths(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), -k); labels.push(d.toLocaleDateString('en-US',{month:'short'}) + ' ’' + String(d.getFullYear()).slice(2)); vals.push(s[ymKey(d.getFullYear(), d.getMonth())] || 0); }
+    const p = profile(hi); const line = []; for (let k = 35; k >= 0; k--){ const d = D.addMonths(new Date(TODAY.getFullYear(), TODAY.getMonth(), 1), -k); line.push(p[d.getMonth()]); }
+    monthChart = `<div class="panel"><div class="toolbar"><div><h2>Monthly issues — ${esc(hi.code)} ${esc(hi.name)}</h2><p class="psub" style="margin:0">Last 36 months. The gold line is the forecast month profile (FY${String(hf[0]).slice(2)}–FY${String(hf[hf.length-1]).slice(2)} average) used for planning.</p></div><div class="spacer"></div>
+      <select onchange="histCode=this.value;renderHist()">${items.map(i => `<option ${i.code===histCode?'selected':''} value="${esc(i.code)}">${esc(i.code + ' — ' + i.name)}</option>`).join('')}</select></div>
+      ${colChart(vals, labels, {color:hi.hex && hi.hex.toLowerCase() !== '#ffffff' ? hi.hex : '#8892a0', line})}</div>`;
+  }
+  el.innerHTML = `
+    <div class="panel"><div class="toolbar"><div><h2>Issue history</h2>
+      <p class="psub" style="margin:0">From <b>${esc(m.source || '—')}</b> · ${D.fmt(m.from)} – ${D.fmt(m.to)} · ${fmtN(m.rows)} records · imported ${D.fmt(m.importedAt)}</p></div><div class="spacer"></div>
+      <button class="btn" onclick="document.getElementById('fileHist').click()">Import new T2 export…</button></div>
+      <div class="note">Run <b>Decals Issued by Multiple Fiscal Years – All Simple</b> in T2 and import the .xlsx here (CSV works too). It replaces history for the months the file covers and keeps older months. Everything is read in your browser.</div>
+      <div class="toolbar"><span class="seg">${[['item','Per hangtag setting'],['p','Tag #s in stock range'],['a','All issues']].map(([k,l]) => `<button class="${histBasis===k?'on':''}" onclick="histBasis='${k}';renderHist()">${l}</button>`).join('')}</span></div>
+      <div class="tablewrap"><table><thead><tr><th>Hangtag</th>${fySet.map(fy => `<th class="n">FY${String(fy).slice(2)}${fy===curFY?' <span class="muted">YTD</span>':''}</th>`).join('')}<th class="n">Forecast / yr</th></tr></thead>
+        <tbody>${items.map(i => `<tr><td>${tagCell(i, histBasis==='item' ? basisLabel(i.basis) : '')}</td>${fySet.map(fy => `<td class="n" style="${hf.includes(fy)?'background:#fbf6e6':''}">${fmtN(fyTot(i,fy))}</td>`).join('')}<td class="n"><b>${i.basis==='none'?'—':fmtN(annual(i))}</b></td></tr>`).join('')}</tbody></table></div>
+      <p class="psub" style="margin-top:10px">Shaded years feed the forecast (set how many in Settings). The first fiscal year in the report is usually partial.</p>
+    </div>${monthChart}`;
+}
+
+/* ---- xlsx / csv reader (no external libraries) ---- */
+async function unzip(buf){
+  const dv = new DataView(buf); let eo = -1;
+  for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50){ eo = i; break; }
+  if (eo < 0) throw new Error('Not an .xlsx file');
+  const n = dv.getUint16(eo + 10, true); let p = dv.getUint32(eo + 16, true); const files = {};
+  for (let k = 0; k < n; k++){
+    const method = dv.getUint16(p + 10, true), csize = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lho = dv.getUint32(p + 42, true);
+    files[new TextDecoder().decode(new Uint8Array(buf, p + 46, nl))] = {method, csize, lho}; p += 46 + nl + el + cl;
+  }
+  return { names:Object.keys(files), async text(name){
+    const f = files[name]; if (!f) return null;
+    const start = f.lho + 30 + dv.getUint16(f.lho + 26, true) + dv.getUint16(f.lho + 28, true);
+    const data = new Uint8Array(buf, start, f.csize);
+    if (f.method === 0) return new TextDecoder().decode(data);
+    const st = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new TextDecoder().decode(await new Response(st).arrayBuffer());
+  }};
+}
+const xmlDec = s => s.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/&amp;/g,'&');
+const colIdx = c => { let n = 0; for (const ch of c) n = n*26 + ch.charCodeAt(0) - 64; return n - 1; };
+async function readXlsx(buf){
+  const z = await unzip(buf);
+  const ssx = await z.text('xl/sharedStrings.xml'); const ss = [];
+  if (ssx){ const re = /<si>([\s\S]*?)<\/si>/g; let m; while ((m = re.exec(ssx))){ let t = '', r2 = /<t[^>]*>([\s\S]*?)<\/t>/g, q; while ((q = r2.exec(m[1]))) t += q[1]; ss.push(xmlDec(t)); } }
+  const sheets = [];
+  for (const nm of z.names.filter(n => /^xl\/worksheets\/[^\/]+\.xml$/i.test(n)).sort()){
+    const x = await z.text(nm); const rows = [];
+    const rr = /<row[^>]*>([\s\S]*?)<\/row>/g; let m;
+    while ((m = rr.exec(x))){
+      const row = []; const cr = /<c r="([A-Z]+)\d+"([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g; let c;
+      while ((c = cr.exec(m[1]))){
+        const t = (c[2].match(/t="(\w+)"/) || [])[1]; const inner = c[3] || ''; let v = (inner.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
+        if (t === 's') v = ss[+v]; else if (t === 'inlineStr') v = xmlDec((inner.match(/<t[^>]*>([\s\S]*?)<\/t>/) || [,''])[1]); else if (t === 'str' || t === 'e') v = v != null ? xmlDec(v) : v; else if (v != null && t !== 'b') v = +v;
+        row[colIdx(c[1])] = v;
+      }
+      rows.push(row);
+    }
+    sheets.push(rows);
+  }
+  return sheets;
+}
+function readCsv(text){
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++){ const ch = text[i];
+    if (q){ if (ch === '"'){ if (text[i+1] === '"'){ f += '"'; i++; } else q = false; } else f += ch; }
+    else if (ch === '"') q = true; else if (ch === ','){ row.push(f); f = ''; } else if (ch === '\n' || ch === '\r'){ if (ch === '\r' && text[i+1] === '\n') i++; row.push(f); rows.push(row); row = []; f = ''; } else f += ch; }
+  if (f !== '' || row.length){ row.push(f); rows.push(row); }
+  return [rows];
+}
+function toDate(v){
+  if (v == null || v === '') return null;
+  if (typeof v === 'number'){ if (v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * DAY)); return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); } return null; }
+  const s = String(v).trim(); let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (m) return new Date(+m[3] < 100 ? 2000 + +m[3] : +m[3], +m[1]-1, +m[2]);
+  m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m) return new Date(+m[1], +m[2]-1, +m[3]);
+  return null;
+}
+/* find Issue date / Decal Code / Decal Number columns; the T2 export's header row sits one column off from its data, so verify against the data itself */
+function extractRecords(rows){
+  const norm = s => String(s ?? '').toLowerCase().replace(/[^a-z]/g,'');
+  let h = -1, ci = -1, ni = -1, di = -1;
+  for (let r = 0; r < Math.min(40, rows.length); r++){
+    const row = rows[r] || []; const n = row.map(norm);
+    const c = n.indexOf('decalcode'), nu = n.indexOf('decalnumber');
+    if (c >= 0 && nu >= 0){ h = r; ci = c; ni = nu; di = n.findIndex(x => x === 'issuedate'); break; }
+  }
+  if (h < 0) return null;
+  const sample = rows.slice(h + 1, h + 400);
+  let best = {score:-1, off:0};
+  [0,-1,1].forEach(off => { let sc = 0; sample.forEach(r => { if (!r) return; const c = String(r[ci+off] ?? '').trim(), nmb = String(r[ni+off] ?? '').trim().toUpperCase(); if (c && /^[A-Z]{1,6}$/.test(c) && nmb.startsWith(c)) sc++; }); if (sc > best.score) best = {score:sc, off}; });
+  const off = best.off; let dcol = di >= 0 ? di + off : -1;
+  const dScore = col => sample.filter(r => r && toDate(r[col])).length;
+  if (dcol < 0 || dScore(dcol) < sample.length * 0.5){ let bc = -1, bs = 0; for (let k = 0; k < 20; k++){ const s = dScore(k); if (s > bs){ bs = s; bc = k; } } dcol = bc; }
+  const recs = [];
+  for (let r = h + 1; r < rows.length; r++){
+    const row = rows[r]; if (!row) continue;
+    const date = toDate(row[dcol]), code = String(row[ci+off] ?? '').trim().toUpperCase(), num = String(row[ni+off] ?? '').trim().toUpperCase();
+    if (date && code) recs.push({date, code, num});
+  }
+  return {recs, score:best.score};
+}
+document.getElementById('fileHist').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  toast('Reading ' + f.name + '…');
+  try {
+    const sheets = /\.csv$/i.test(f.name) ? readCsv(await f.text()) : await readXlsx(await f.arrayBuffer());
+    let best = null; sheets.forEach(rows => { const x = extractRecords(rows); if (x && (!best || x.recs.length > best.recs.length)) best = x; });
+    if (!best || !best.recs.length) throw new Error('Couldn\'t find Issue Date, Decal Code and Decal Number columns in this file.');
+    previewImport(best.recs, f.name);
+  } catch(err){ alertModal('Import failed', err.message || String(err)); }
+});
+function buildUsage(recs){
+  recs.sort((a,b) => a.date - b.date || a.num.localeCompare(b.num));
+  const out = {}, codes = new Set(S.items.filter(i => i.code).map(i => i.code));
+  const other = {};
+  S.items.filter(i => i.code).forEach(i => { if (!out[i.code]) out[i.code] = {p:{}, a:{}, last:null, end:numOf(i.endNum), seen:new Set(), iss:[]}; });
+  recs.forEach(r => {
+    const o = out[r.code]; if (!o){ other[r.code] = (other[r.code]||0) + 1; return; }
+    const k = ymKey(r.date.getFullYear(), r.date.getMonth()); o.a[k] = (o.a[k]||0) + 1;
+    const m = r.num.match(new RegExp('^' + r.code + '(\\d+)$'));
+    if (m){ const n = +m[1]; if (o.end == null || n <= o.end){ if (!o.seen.has(n)){ o.seen.add(n); o.p[k] = (o.p[k]||0) + 1; } o.iss.push([r.date, n]); } }
+  });
+  Object.values(out).forEach(o => { if (o.iss.length){ const ld = o.iss[o.iss.length-1][0]; let best = null; o.iss.forEach(([d,n]) => { if ((ld - d)/DAY <= 120 && (!best || n > best[0])) best = [n, D.iso(d)]; }); o.last = best; } delete o.seen; delete o.iss; delete o.end; });
+  return {out, other, codes};
+}
+function previewImport(recs, name){
+  const {out, other} = buildUsage(recs);
+  const from = recs[0].date, to = recs[recs.length-1].date;
+  const fys = []; for (let fy = fyOf(from); fy <= fyOf(to); fy++) fys.push(fy);
+  const fyT = (ser, fy) => Object.entries(ser).reduce((t,[k,v]) => { const [y,m] = k.split('-').map(Number); return t + (((m >= 7 ? y+1 : y) === fy) ? v : 0); }, 0);
+  window._pendingImport = {out, meta:{source:name, from:D.iso(from), to:D.iso(to), rows:recs.length, importedAt:D.iso(TODAY)}};
+  const items = S.items.filter(i => i.code);
+  openModal(`<h2>Import issue history</h2><div class="modal-sub">${esc(name)} · ${fmtN(recs.length)} records · ${D.fmt(from)} – ${D.fmt(to)}. Hangtag counts below use each hangtag's “usage from” setting.</div>
+    <div class="tablewrap"><table><thead><tr><th>Code</th>${fys.map(fy => `<th class="n">FY${String(fy).slice(2)}</th>`).join('')}<th>Last tag # issued</th></tr></thead><tbody>
+    ${items.map(i => { const o = out[i.code], ser = i.basis === 'all' ? o.a : o.p; return `<tr><td class="code">${esc(i.code)}</td>${fys.map(fy => `<td class="n">${fmtN(fyT(ser,fy))}</td>`).join('')}<td class="mono">${o.last ? esc(tagNo(i,o.last[0])) + ' <span class="muted">' + D.fmt(o.last[1]) + '</span>' : '—'}</td></tr>`; }).join('')}
+    </tbody></table></div>
+    <p class="psub" style="margin-top:10px">${Object.keys(other).length} other permit codes (decals, virtual permits) are ignored. Months from ${D.short(from)} through ${D.short(to)} will be replaced; earlier months are kept.</p>
+    <div class="modal-footer"><span></span><div><button class="btn secondary" onclick="closeModal()">Cancel</button> <button class="btn" onclick="applyImport()">Import</button></div></div>`);
+}
+function applyImport(){
+  const {out, meta} = window._pendingImport; const lo = meta.from.slice(0,7), hi = meta.to.slice(0,7);
+  Object.entries(out).forEach(([code, o]) => {
+    const cur = S.usage[code] || {p:{}, a:{}, last:null};
+    ['p','a'].forEach(b => { Object.keys(cur[b]).forEach(k => { if (k >= lo && k <= hi) delete cur[b][k]; }); Object.assign(cur[b], o[b]); });
+    if (o.last) cur.last = o.last;
+    S.usage[code] = cur;
+  });
+  S.usageMeta = meta; window._pendingImport = null; save(); closeModal(); render(); toast('Issue history imported');
+}
+
+/* ================= SETTINGS ================= */
+function renderSettings(){
+  const s = S.settings, el = document.getElementById('view-settings');
+  const inp = (path, label, type='text', hint='', extra='') => `<div class="field"><label>${label}</label><input type="${type}" value="${esc(getP(path))}" onchange="setP('${path}', this.${type==='checkbox'?'checked':'value'}, '${type}')" ${type==='number'?'step="any"':''} ${extra}>${hint?`<div class="hint">${hint}</div>`:''}</div>`;
+  el.innerHTML = `
+    <div class="panel"><h2>Vendor &amp; quote email</h2><p class="psub">Used to draft the quote request on the Quote Request tab.</p>
+      <div class="form-grid">
+        ${inp('vendor.company','Vendor')}${inp('vendor.contactFirst','Greeting name')}
+        ${inp('vendor.to','To')}${inp('vendor.cc','Cc','text','Separate with semicolons')}
+        ${inp('vendor.customerNo','Customer #')}${inp('vendor.phone','Vendor phone')}
+        <div class="field full">${inp('quoteSubject','Subject','text','{FY} becomes the current fiscal year, e.g. FY27')}</div>
+        <div class="field full"><label>Opening paragraph</label><textarea onchange="setP('quoteIntro',this.value)">${esc(s.quoteIntro)}</textarea></div>
+        ${inp('sender.first','Sign-off name')}
+        <div class="field"><label>&nbsp;</label><label style="font-weight:400"><input type="checkbox" ${s.sender.includeSig?'checked':''} onchange="setP('sender.includeSig',this.checked,'checkbox')" style="width:auto"> Add signature block (leave off if Outlook adds yours)</label></div>
+        <div class="field full"><label>Signature block</label><textarea onchange="setP('sender.sig',this.value)">${esc(s.sender.sig)}</textarea></div>
+        <div class="field full"><label>Hangtag spec (for reference)</label><textarea onchange="setP('spec',this.value)">${esc(s.spec)}</textarea></div>
+      </div></div>
+    <div class="panel"><h2>PO request</h2><p class="psub">The person who opens POs for quotes.</p>
+      <div class="form-grid">${inp('po.first','Name')}${inp('po.to','Email')}</div></div>
+    <div class="panel"><h2>Planning</h2>
+      <div class="form-grid three">
+        ${inp('adminWeeks','Quote + PO time (weeks)','number')}${inp('vendorWeeks','Vendor lead time (weeks)','number','Proof 2–4 working days + production 25–30 working days + freight')}
+        ${inp('safetyMonths','Safety stock (months)','number')}
+        ${inp('coverMonths','Order covers (months after arrival)','number')}${inp('warnDays','“Order soon” window (days)','number')}
+        ${inp('histYears','Forecast from last N full fiscal years','number','',`min="1" max="6"`)}
+        ${inp('roundTo','Round order qty up to','number')}${inp('minQty','Minimum line qty','number')}
+        ${inp('priceEach','Est. price per tag ($)','number','Updates from each received order (FY26: $3,390.74 ÷ 1,400)')}
+        ${inp('freight','Est. freight per order ($)','number')}
+      </div></div>
+    <div class="panel"><h2>Data</h2><p class="psub">${HOSTED ? 'Saved to the shared UCAPS Tools database — everyone signed in sees the same data.' : 'Saved in this browser only. Export a backup to move it to another computer.'}</p>
+      <div class="btnrow"><button class="btn secondary" onclick="exportJSON()">Export backup (.json)</button><button class="btn secondary" onclick="document.getElementById('fileBackup').click()">Import backup…</button><button class="btn danger" onclick="resetAll()">Reset to starting data</button></div></div>`;
+}
+function getP(path){ return path.split('.').reduce((o,k) => o == null ? o : o[k], S.settings); }
+function setP(path, v, type){ const ks = path.split('.'); let o = S.settings; for (let i = 0; i < ks.length-1; i++) o = o[ks[i]]; o[ks[ks.length-1]] = type === 'number' ? (v === '' ? 0 : +v) : v; save(); toast('Saved'); }
+function exportJSON(){ const b = new Blob([JSON.stringify(S, null, 1)], {type:'application/json'}); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'hangtag-planner-backup-' + D.iso(TODAY) + '.json'; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+document.getElementById('fileBackup').addEventListener('change', async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  try { const d = JSON.parse(await f.text()); if (!d.items || !d.settings) throw new Error('Not a Hangtag Planner backup'); if (!confirmBox('Replace all current data with this backup?')) return; S = normalize(d); save(); render(); toast('Backup restored'); } catch(err){ alertModal('Import failed', err.message); }
+});
+function resetAll(){ if (!confirmBox('Reset everything to the starting data? This replaces counts, orders and history.')) return; S = defaults(); save(); render(); toast('Reset'); }
+
+/* ================= modal ================= */
+function openModal(html){ document.getElementById('modal').innerHTML = html; document.getElementById('modalBg').classList.add('active'); }
+function closeModal(){ document.getElementById('modalBg').classList.remove('active'); }
+document.getElementById('modalBg').addEventListener('mousedown', e => { if (e.target.id === 'modalBg') closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+function alertModal(t, m){ openModal(`<h2>${esc(t)}</h2><p>${esc(m)}</p><div class="modal-footer"><span></span><button class="btn" onclick="closeModal()">OK</button></div>`); }
+function confirmBox(m){ return window.confirm(m); }
+const val = id => (document.getElementById(id) || {}).value ?? '';
+
+/* ================= boot ================= */
+function normalize(d){
+  const def = defaults();
+  d.settings = Object.assign(def.settings, d.settings || {});
+  ['vendor','sender','po'].forEach(k => d.settings[k] = Object.assign(defaultSettings()[k], d.settings[k] || {}));
+  d.items = d.items || def.items; d.ledger = d.ledger || []; d.usage = d.usage || def.usage; d.usageMeta = d.usageMeta || def.usageMeta;
+  d.orders = d.orders || []; d.draft = d.draft || {lines:[]}; d.plan = d.plan || {qty:{}};
+  return d;
+}
+(async function boot(){
+  document.getElementById('storeMode').textContent = HOSTED ? '· shared data' : '· saved in this browser';
+  document.getElementById('view-dashboard').innerHTML = '<div class="empty">Loading…</div>';
+  const d = await storeGet();
+  S = d ? normalize(d) : defaults();
+  if (!d) storeSet(S);
+  render();
+})();
+</script>
+</body>
+</html>
