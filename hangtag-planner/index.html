@@ -238,7 +238,7 @@ function seedItems(){
   const rows = [
     ['cp','Carpool','CP','71385','CP01000',100,'Green','#2e9e4f','phys'],
     ['crc','CRC Member','CRC','71385','CRC05600',172,'Red','#d23a3a','phys'],
-    ['ep','External Partner','EP','398314','EP00650',161,'Purple','#7d4fc4','phys'],
+    ['ep','External Partner','EP','398314','EP00704',161,'Purple','#7d4fc4','phys'],
     ['hc','Hangtag Commuter','HC','405762','HC15600',378,'Blue','#2f6fed','all'],
     ['hf','Hangtag Faculty/Staff','HF','','HF01650',120,'White','#ffffff','phys'],
     ['hr','Hangtag Resident','HR','398314','HR16900',466,'Light Green','#9be07a','all'],
@@ -1016,6 +1016,9 @@ function normalize(d){
   ['vendor','sender','po'].forEach(k => d.settings[k] = Object.assign(defaultSettings()[k], d.settings[k] || {}));
   d.items = d.items || def.items; d.ledger = d.ledger || []; d.usage = d.usage || def.usage; d.usageMeta = d.usageMeta || def.usageMeta;
   d.orders = d.orders || []; d.draft = d.draft || {lines:[]}; d.plan = d.plan || {qty:{}};
+  /* EP Ending # correction (Oct 15, 2026): count of 161 is right, so stock runs EP00544–EP00704, not to EP00650 */
+  const ep = d.items.find(i => i.id === 'ep');
+  if (ep && ep.endNum === 'EP00650'){ ep.endNum = 'EP00704'; d.ledger.push({id:uid(), ts:Date.now(), date:'2026-10-15', itemId:'ep', kind:'note', note:'Ending # corrected EP00650 → EP00704 (count of 161 confirmed; last issued EP00543)'}); }
   return d;
 }
 (async function boot(){
