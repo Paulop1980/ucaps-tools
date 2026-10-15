@@ -31,6 +31,11 @@ ucaps-tools/              ← your GitHub repository root
 │                           only in Supabase (ucaps_store key ucaps_payroll_plan_fy27) —
 │                           never commit plan exports or encumbrance reports here
 │
+├── hangtag-planner/
+│   └── index.html        ← Hangtag Planner — parking hangtag stock, T2 issue-history import,
+│                           order planner, WWL quote request + PO emails. Synced via Supabase
+│                           (ucaps_store key ucaps-hangtag-planner-v1)
+│
 ├── rma-tracker/
 │   └── index.html        ← RMA Tracker — outgoing equipment returns, vendor directory,
 │                           printable Parcel Delivery Request form. Synced via Supabase
