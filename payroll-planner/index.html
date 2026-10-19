@@ -114,10 +114,12 @@ textarea{font-family:var(--f-num);font-size:.82rem;width:100%;min-height:220px;b
     </div>
     <div class="hdr-actions">
       <span class="savestate" id="savestate">Signing in…</span>
-      <button class="btn primary" data-act="pdf" id="btn-pdf">Supervisor report (PDF)</button>
+      <button class="btn primary" data-act="enc-import" id="btn-enc">Update from encumbrance report</button>
+      <button class="btn" data-act="pdf" id="btn-pdf">Supervisor report (PDF)</button>
       <button class="btn" data-act="export">Export plan</button>
       <button class="btn" data-act="import">Import plan</button>
       <input type="file" id="importfile" accept=".json,application/json" hidden>
+      <input type="file" id="encfile" accept=".xlsx,.xls,.csv" hidden>
     </div>
   </header>
 
@@ -347,7 +349,7 @@ function renderEmp(T){
    <div class="scroll"><table>
     <thead><tr><th>Employee</th><th>Rate / hr</th><th class="r">Hrs/wk now</th><th class="r">Hrs/wk new</th><th class="r">Hrs left</th><th class="r">Projected cost</th><th class="r">Encumbered</th><th class="r">Encumbrance check</th><th class="r" title="Weekly hours the current encumbrance pays for, from the change date">Enc. supports hrs/wk</th><th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
-   <div class="toolbar"><button class="btn primary" data-act="addhire">+ Add a new hire</button><button class="btn" data-act="fitall">Fit everyone's hours to their encumbrance</button><button class="btn" data-act="enc-import">Update from encumbrance report</button><input type="file" id="encfile" accept=".xlsx,.xls,.csv" hidden><span class="meta" id="encmsg"></span><button class="btn danger" data-act="resetconfirm">Reset to the ${fmtD(S.settings.encReportDate||'2026-10-01')} report</button><span id="resetzone"></span></div>`;
+   <div class="toolbar"><button class="btn primary" data-act="addhire">+ Add a new hire</button><button class="btn" data-act="fitall">Fit everyone's hours to their encumbrance</button><button class="btn" data-act="enc-import">Update from encumbrance report</button><button class="btn danger" data-act="resetconfirm">Reset to the ${fmtD(S.settings.encReportDate||'2026-10-01')} report</button><span id="resetzone"></span></div>`;
 }
 
 function periods(T){
@@ -445,11 +447,11 @@ function renderSet(){
 function render(){
   if(!S){
     $('#summary').innerHTML=''; $('#alerts').innerHTML='';
-    $('#btn-pdf').disabled=true;
+    $('#btn-pdf').disabled=true; $('#btn-enc').disabled=true;
     $('#tab-'+activeTab).innerHTML=`<div class="empty"><h3>No payroll plan loaded</h3><p>${signedIn?'Choose <b>Import plan</b> to load a plan file exported from this tool.':'Sign in to load the saved plan.'}</p></div>`;
     return;
   }
-  $('#btn-pdf').disabled=false;
+  $('#btn-pdf').disabled=false; $('#btn-enc').disabled=false;
   const T=totals();
   renderSummary(T);
   if(activeTab==='emp') renderEmp(T);
@@ -510,7 +512,7 @@ document.addEventListener('click',ev=>{
   if(!S) return;
   if(a==='txn-import'){ $('#txnfile').click(); return; }
   if(a==='enc-import'){ $('#encfile').click(); return; }
-  if(a==='enc-apply'){ applyEncPreview(); const m=$('#encmsg'); if(m) m.textContent='Encumbrances updated from the '+fmtD(S.settings.encReportDate)+' report'; return; }
+  if(a==='enc-apply'){ applyEncPreview(); $('#savestate').textContent='Encumbrances updated from the '+fmtD(S.settings.encReportDate)+' report — saving…'; return; }
   if(a==='enc-cancel'){ encPreview=null; render(); return; }
   const e=findEmp(b);
   if(a==='toggle'){openRow=openRow===e.id?null:e.id;render();}
@@ -830,7 +832,7 @@ document.addEventListener('change',async ev=>{
   if(t.dataset.encradd!=null&&encPreview){ encPreview.reimbAdds[+t.dataset.encradd].add=t.checked; render(); return; }
   if(t.id!=='encfile') return;
   const f=t.files[0]; t.value=''; if(!f||!S) return;
-  try{ await loadEncFile(f); }catch(err){ const m=$('#encmsg'); if(m) m.textContent='Import failed: '+err.message; }
+  try{ await loadEncFile(f); }catch(err){ $('#savestate').textContent='Encumbrance import failed: '+err.message; }
 });
 document.addEventListener('change',async ev=>{
   if(ev.target.id!=='txnfile') return;
