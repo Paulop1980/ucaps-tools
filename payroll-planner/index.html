@@ -236,7 +236,7 @@ function totals(){
   const oeEnc=o=>o.enc==null?(+o.amount||0):(+o.enc||0);
   const other=sum(st.otherEncumbrances.map(o=>o.amount));
   const otherEnc=sum(st.otherEncumbrances.map(oeEnc));
-  const encReport=sum(S.employees.filter(e=>!e.isNew).map(e=>(+e.enc||0)+(+e.fringeEnc||0)))+otherEnc;
+  const encReport=sum(S.employees.map(e=>(+e.enc||0)+(+e.fringeEnc||0)))+otherEnc;
   const encIncluded=sum(inc.map(r=>r.p.encTotal))+otherEnc;
   const projected=sum(inc.map(r=>r.p.cost))+other;
   return {rows,inc,other,otherEnc,encReport,encIncluded,projected,
@@ -254,7 +254,7 @@ function renderSummary(T){
   const st=S.settings;
   const unconf=S.employees.filter(e=>e.include!==false&&!e.rateOk).length;
   $('#summary').innerHTML=`
-   <div class="ledger"><h2>Per the encumbrance report</h2>
+   <div class="ledger"><h2>Per the encumbrance report${st.encReportDate?' ('+fmtD(st.encReportDate)+')':''}</h2>
      <div class="row"><span>Base budget</span><span class="num">${money(st.baseBudget)}</span></div>
      <div class="row"><span>FYTD expended</span><span class="num">−${money(st.ytdExpended)}</span></div>
      <div class="row"><span>Encumbered</span><span class="num">−${money(T.encReport)}</span></div>
@@ -342,12 +342,12 @@ function renderEmp(T){
      <td class="r" style="white-space:nowrap">$<input type="number" step="0.01" class="money" id="oe-enc-${i}" data-oe="${i}" data-of="enc" value="${enc}" aria-label="Encumbered"></td>
      <td class="r">${Math.abs(d)<1?'<span class="pill good">Matches</span>':d>0?`<span class="pill good">+${money0(d)} spare</span>`:(enc===0?'<span class="pill warn">No encumbrance</span>':`<span class="pill bad">${money0(d)} short</span>`)}</td><td colspan="2"></td></tr>`;}).join('')+
     `<tr><td colspan="10"><button class="btn small" data-act="oe-add">+ Add a cell phone reimbursement</button></td></tr>`;
-  $('#tab-emp').innerHTML=`<h3>Employees &amp; encumbrances</h3>
+  $('#tab-emp').innerHTML=encPreviewHtml()+`<h3>Employees &amp; encumbrances</h3>
    <p class="help">Projected cost = remaining scheduled hours × rate, from ${fmtD(addDays(S.settings.paidThrough,1))} to each contract end. Holidays and Thanksgiving recess are skipped for everyone. Seasonal staff skip ${fmtD(S.settings.winterBlackoutStart)}–${fmtD(S.settings.winterBlackoutEnd)}. Interns work only from the first to the last day of classes. Open <b>Edit hours</b> to change someone's weekly hours from ${fmtD(S.settings.effectiveDate)} on.</p>
    <div class="scroll"><table>
     <thead><tr><th>Employee</th><th>Rate / hr</th><th class="r">Hrs/wk now</th><th class="r">Hrs/wk new</th><th class="r">Hrs left</th><th class="r">Projected cost</th><th class="r">Encumbered</th><th class="r">Encumbrance check</th><th class="r" title="Weekly hours the current encumbrance pays for, from the change date">Enc. supports hrs/wk</th><th></th></tr></thead>
     <tbody>${body}</tbody></table></div>
-   <div class="toolbar"><button class="btn primary" data-act="addhire">+ Add a new hire</button><button class="btn" data-act="fitall">Fit everyone's hours to their encumbrance</button><button class="btn danger" data-act="resetconfirm">Reset to the 10/1 report</button><span id="resetzone"></span></div>`;
+   <div class="toolbar"><button class="btn primary" data-act="addhire">+ Add a new hire</button><button class="btn" data-act="fitall">Fit everyone's hours to their encumbrance</button><button class="btn" data-act="enc-import">Update from encumbrance report</button><input type="file" id="encfile" accept=".xlsx,.xls,.csv" hidden><span class="meta" id="encmsg"></span><button class="btn danger" data-act="resetconfirm">Reset to the ${fmtD(S.settings.encReportDate||'2026-10-01')} report</button><span id="resetzone"></span></div>`;
 }
 
 function periods(T){
@@ -427,7 +427,7 @@ function renderSet(){
   const st=S.settings;
   const f=(id,label,val,type='date',step)=>`<label class="field">${label}<input type="${type}" ${step?`step="${step}"`:''} id="set-${id}" data-s="${id}" value="${val}"></label>`;
   $('#tab-set').innerHTML=`<div class="grid2"><div>
-   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Importing a Transaction Detail on the Actual pay tab sets FYTD expended and Paid through for you. Every save also updates the Ambassadors, Student Parking Enforcers and Cell Phone Reimbursements lines on the FY Budget Tracker’s Payroll tab.</p>
+   <h3>Budget</h3><p class="help">From the Encumbrance YTD Detail run 10/1/2026. Update these when a new report comes out. Importing a Transaction Detail on the Actual pay tab sets FYTD expended and Paid through for you, and <b>Update from encumbrance report</b> on the Employees tab sets every encumbrance. Every save also updates the Ambassadors, Student Parking Enforcers and Cell Phone Reimbursements lines on the FY Budget Tracker’s Payroll tab.</p>
    <div class="formgrid">${f('baseBudget','Base budget',st.baseBudget,'number','0.01')}${f('ytdExpended','FYTD expended',st.ytdExpended,'number','0.01')}${f('paidThrough','Paid through',st.paidThrough)}${f('effectiveDate','Hour changes start',st.effectiveDate)}${f('seasonalFringePct','Seasonal pension/ins. %',st.seasonalFringePct,'number','0.01')}${f('fyEnd','Fiscal year end',st.fyEnd)}</div>
    <p class="help" style="margin-top:10px">The 2.21% pension/insurance rate is taken from the 700804 lines. Interns have no fringe line.</p>
    <h3 style="margin-top:16px">Semesters &amp; breaks</h3>
@@ -509,6 +509,9 @@ document.addEventListener('click',ev=>{
   if(a==='import'){ $('#importfile').click(); return; }
   if(!S) return;
   if(a==='txn-import'){ $('#txnfile').click(); return; }
+  if(a==='enc-import'){ $('#encfile').click(); return; }
+  if(a==='enc-apply'){ applyEncPreview(); const m=$('#encmsg'); if(m) m.textContent='Encumbrances updated from the '+fmtD(S.settings.encReportDate)+' report'; return; }
+  if(a==='enc-cancel'){ encPreview=null; render(); return; }
   const e=findEmp(b);
   if(a==='toggle'){openRow=openRow===e.id?null:e.id;render();}
   if(a==='clearprop'){delete e.prop;commit();}
@@ -683,6 +686,117 @@ function renderAct(){
    ${importer}`;
 }
 
+/* ---------- encumbrance report import (Summit "Encumbrance Year to Date Detail") ----------
+   Matches report lines to the plan by employee ID, then by name. Anyone in the plan who isn't
+   on the report gets an encumbrance of $0. Nothing changes until the preview is applied. */
+let encPreview=null;
+const ENC_TYPE={'728300':'seasonal','730015':'intern'};
+function parseEncReport(buf){
+  const wb=XLSX.read(buf,{type:'array'});
+  let rows=null;
+  for(const n of wb.SheetNames){ const r=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null});
+    if(r.some(x=>x&&x.includes('Employee Name')&&x.includes('Amount')&&x.includes('Account'))){rows=r;break;} }
+  if(!rows) throw new Error('This doesn’t look like an Encumbrance YTD Detail export (no Account / Employee Name / Amount header).');
+  const hi=rows.findIndex(x=>x&&x.includes('Employee Name')&&x.includes('Amount')&&x.includes('Account')), H=rows[hi], c=n=>H.indexOf(n);
+  const top=rows.slice(0,hi).map(r=>(r||[]).filter(x=>x!=null).join(' ')).join('\n');
+  const fund=(top.match(/Fund:\s*(\d+)/)||[])[1]||'';
+  if(fund&&fund!=='52110') throw new Error('This report is for fund '+fund+', not 52110.');
+  if(/encumbrance/i.test(top)===false) throw new Error('This doesn’t look like an encumbrance report.');
+  const runM=top.match(/Time Run:\s*(\d{1,2})\/(\d{1,2})\/(\d{4})([^\n]*)/);
+  const R={run:runM?runM[0].replace(/Time Run:\s*/,'').trim():'', runDate:runM?`${runM[3]}-${runM[1].padStart(2,'0')}-${runM[2].padStart(2,'0')}`:ISO(Date.now()),
+    people:{}, reimb:[], other:[], total:0, reportTotal:null};
+  for(const r of rows.slice(hi+1)){
+    if(!r) continue;
+    if(/grand total/i.test(String(r[0]||''))){ const v=+r[c('Amount')]; if(isFinite(v)) R.reportTotal=v; break; }
+    const acct=String(r[c('Account')]??'').trim(), amt=+r[c('Amount')];
+    if(!/^\d{6}$/.test(acct)||!isFinite(amt)) continue;
+    R.total+=amt;
+    const name=String(r[c('Employee Name')]||'').trim(), id=String(r[c('Employee ID')]??'').trim(), end=xlDate(r[c('Encumbrance End Date')]);
+    if(acct==='727600'){ R.reimb.push({name,id,amount:amt,end}); continue; }
+    if(acct==='700804'||ENC_TYPE[acct]){
+      const k=id||personKey(name), p=R.people[k]=R.people[k]||{name,id,key:personKey(name),enc:0,fringe:0,type:null,end:null};
+      if(acct==='700804') p.fringe+=amt; else { p.enc+=amt; p.type=ENC_TYPE[acct]; p.end=end||p.end; }
+      continue;
+    }
+    R.other.push({acct,desc:r[c('Account Desc')]||'',name,amount:amt});
+  }
+  const r2=n=>Math.round(n*100)/100; R.total=r2(R.total);
+  for(const p of Object.values(R.people)){p.enc=r2(p.enc);p.fringe=r2(p.fringe);}
+  return R;
+}
+function buildEncPreview(R){
+  const used=new Set(), rows=[];
+  const find=e=>{ if(e.empId){ const p=Object.values(R.people).find(p=>p.id===e.empId); if(p) return p; }
+    const k=personKey(e.name); return Object.values(R.people).find(p=>p.key===k&&!used.has(p))||null; };
+  for(const e of S.employees){
+    const p=find(e); if(p) used.add(p);
+    const oldEnc=+e.enc||0, oldFr=+e.fringeEnc||0, newEnc=p?p.enc:0, newFr=p?p.fringe:0;
+    rows.push({id:e.id,name:e.name,onReport:!!p,reportName:p?p.name:'',oldEnc,newEnc,oldFr,newFr,newEmpId:p&&p.id&&p.id!==e.empId?p.id:null,
+      changed:Math.abs(oldEnc-newEnc)>=0.005||Math.abs(oldFr-newFr)>=0.005});
+  }
+  const adds=Object.values(R.people).filter(p=>!used.has(p)).map(p=>({...p,add:true}));
+  const rUsed=new Set(), reimb=S.settings.otherEncumbrances.map((o,i)=>{
+    const ln=String(o.label).toLowerCase();
+    const m=R.reimb.find(x=>!rUsed.has(x)&&ln.includes(String(x.name).split(',')[0].toLowerCase().trim()));
+    if(m) rUsed.add(m);
+    const oldEnc=o.enc==null?+o.amount:+o.enc, newEnc=m?m.amount:0;
+    return {i,label:o.label,onReport:!!m,oldEnc,newEnc,changed:Math.abs(oldEnc-newEnc)>=0.005};
+  });
+  const reimbAdds=R.reimb.filter(x=>!rUsed.has(x)).map(x=>({...x,add:true}));
+  return {R,rows,adds,reimb,reimbAdds};
+}
+function applyEncPreview(){
+  const X=encPreview; if(!X) return;
+  const apply=(list,isBaseline)=>{
+    for(const r of X.rows){ const e=list.find(x=>x.id===r.id); if(!e) continue;
+      e.enc=r.newEnc; if(r.newFr||e.fringeEnc) e.fringeEnc=r.newFr; if(r.newEmpId) e.empId=r.newEmpId;
+      if(!isBaseline&&e.note&&/encumbrance being added/i.test(e.note)&&r.newEnc>0) e.note=e.note.replace(/\s*—?\s*encumbrance being added/i,'').trim()||undefined; }
+  };
+  apply(S.employees,false);
+  const rateFor=t=>{ const rs=S.employees.filter(e=>e.type===t).map(e=>e.rate); return rs.length?rs.sort((a,b)=>rs.filter(v=>v===b).length-rs.filter(v=>v===a).length)[0]:(t==='seasonal'?17.25:15); };
+  for(const p of X.adds.filter(a=>a.add)){
+    const type=p.type||'intern', st=S.settings;
+    const end=type==='intern'?((p.end&&p.end<st.springStart)?(p.end<st.fallEnd?p.end:st.fallEnd):st.springEnd):(p.end||st.fyEnd);
+    const [last,first]=p.name.split(',');
+    S.employees.push({id:'rpt'+(p.id||Date.now()),name:(last||'').trim()+', '+(first||'').trim(),empId:p.id,type,enc:p.enc,fringeEnc:p.fringe||0,end,rate:rateFor(type),rateOk:false,cur:[0,0,0,0,0],
+      note:'Added from the '+fmtD(X.R.runDate)+' encumbrance report — set hours and confirm rate'});
+  }
+  for(const r of X.reimb){ const o=S.settings.otherEncumbrances[r.i]; if(!o) continue;
+    o.enc=r.newEnc; if(r.onReport) o.amount=r.newEnc;   // on the report: the encumbrance is the remaining reimbursement
+  }
+  for(const x of X.reimbAdds.filter(a=>a.add)) S.settings.otherEncumbrances.push({label:'Cell phone reimbursement — '+x.name.replace(',',', '),amount:x.amount,enc:x.amount,note:'Added from the encumbrance report'});
+  // keep "Reset" pointed at the newest report: same encumbrances on the baseline, no proposed hour changes
+  S.baseline={settings:clone(S.settings),employees:clone(S.employees).map(e=>{delete e.prop;return e;})};
+  S.settings.encReportRun=X.R.run; S.settings.encReportDate=X.R.runDate; S.settings.encReportTotal=X.R.total;
+  S.baseline.settings.encReportRun=X.R.run; S.baseline.settings.encReportDate=X.R.runDate; S.baseline.settings.encReportTotal=X.R.total;
+  encPreview=null; commit();
+}
+function encPreviewHtml(){
+  const X=encPreview; if(!X) return '';
+  const T=X.R, changed=X.rows.filter(r=>r.changed), zeroed=changed.filter(r=>!r.onReport), rc=X.reimb.filter(r=>r.changed);
+  const planTotal=sum(X.rows.map(r=>r.newEnc+r.newFr))+sum(X.adds.filter(a=>a.add).map(a=>a.enc+a.fringe))+sum(X.reimb.map(r=>r.newEnc))+sum(X.reimbAdds.filter(a=>a.add).map(a=>a.amount));
+  const line=(name,o,n,note)=>`<tr><td>${esc(name)}${note?`<div class="meta">${note}</div>`:''}</td><td class="r num">${money(o)}</td><td class="r num">${money(n)}</td><td class="r num ${n-o<0?'pos':(n-o>0?'neg':'')}">${n-o>0?'+':''}${money(n-o)}</td></tr>`;
+  const body=[
+    ...changed.map(r=>line(r.name,r.oldEnc+r.oldFr,r.newEnc+r.newFr,!r.onReport?'<span class="pill warn">Not on report — set to $0</span>':(r.newEmpId?'Matched by name to '+esc(r.reportName)+' (ID '+esc(r.newEmpId)+')':(r.newFr?'incl. '+money(r.newFr)+' pension/ins.':'')))),
+    ...rc.map(r=>line(r.label,r.oldEnc,r.newEnc,!r.onReport?'<span class="pill warn">Not on report — set to $0</span>':''))
+  ].join('')||'<tr><td colspan="4" class="meta">Every encumbrance already matches this report.</td></tr>';
+  const adds=[...X.adds.map((a,i)=>`<label class="meta" style="display:block"><input type="checkbox" id="encadd-${i}" data-encadd="${i}" ${a.add?'checked':''}> Add <b>${esc(a.name)}</b> (${a.type==='seasonal'?'seasonal':'intern'}, ${money(a.enc+a.fringe)} encumbered) to the plan</label>`),
+    ...X.reimbAdds.map((a,i)=>`<label class="meta" style="display:block"><input type="checkbox" id="encradd-${i}" data-encradd="${i}" ${a.add?'checked':''}> Add a reimbursement line for <b>${esc(a.name)}</b> (${money(a.amount)})</label>`)].join('');
+  return `<div class="ledger" style="margin-bottom:14px;border-color:var(--accent)">
+    <h2>Encumbrance report preview · run ${esc(T.run)}</h2>
+    <p class="help" style="margin:0 0 8px">${changed.length+rc.length} change${changed.length+rc.length===1?'':'s'}${zeroed.length?`, including ${zeroed.length} not on the report that will go to $0`:''}. Report total <b class="num">${money(T.total)}</b>${T.reportTotal!=null&&Math.abs(T.reportTotal-T.total)>=0.01?` <span class="pill bad">Grand Total on report says ${money(T.reportTotal)}</span>`:''}${Math.abs(planTotal-T.total)<0.01?' — the plan will match it exactly.':` — the plan will total ${money(planTotal)}.`}</p>
+    <div class="scroll"><table><thead><tr><th>Line</th><th class="r">Encumbered now</th><th class="r">Per report</th><th class="r">Change</th></tr></thead><tbody>${body}</tbody></table></div>
+    ${adds?`<div style="margin-top:10px"><div class="meta" style="font-weight:600;margin-bottom:4px">On the report but not in the plan</div>${adds}</div>`:''}
+    ${T.other.length?`<p class="meta" style="margin-top:8px">Not imported (other accounts): ${T.other.map(o=>esc(o.acct+' '+o.desc+' '+money(o.amount))).join('; ')}</p>`:''}
+    <div class="toolbar"><button class="btn primary" data-act="enc-apply">Apply these encumbrances</button><button class="btn" data-act="enc-cancel">Cancel</button></div>
+  </div>`;
+}
+async function loadEncFile(file){
+  if(!window.XLSX) throw new Error('The spreadsheet reader didn’t load. Check your connection and try again.');
+  encPreview=buildEncPreview(parseEncReport(await file.arrayBuffer()));
+  activeTab='emp'; document.querySelector('nav.tabs button[data-tab="emp"]').click(); render();
+}
+
 /* ---------- feed for the FY Budget Tracker (Payroll tab) ----------
    Group totals only, no names. Ambassadors line = seasonal, Student Parking Enforcers line = intern. */
 const SUMMARY_KEY='ucaps_payroll_summary_fy27';
@@ -710,6 +824,14 @@ async function writeSummary(sb){
 /* ---------- export / import ---------- */
 function saveFile(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
 function exportPlan(){ saveFile('UCAPS_Payroll_Plan_'+ISO(Date.now())+'.json', new Blob([JSON.stringify(S,null,2)],{type:'application/json'})); }
+document.addEventListener('change',async ev=>{
+  const t=ev.target;
+  if(t.dataset.encadd!=null&&encPreview){ encPreview.adds[+t.dataset.encadd].add=t.checked; render(); return; }
+  if(t.dataset.encradd!=null&&encPreview){ encPreview.reimbAdds[+t.dataset.encradd].add=t.checked; render(); return; }
+  if(t.id!=='encfile') return;
+  const f=t.files[0]; t.value=''; if(!f||!S) return;
+  try{ await loadEncFile(f); }catch(err){ const m=$('#encmsg'); if(m) m.textContent='Import failed: '+err.message; }
+});
 document.addEventListener('change',async ev=>{
   if(ev.target.id!=='txnfile') return;
   const f=ev.target.files[0]; ev.target.value=''; if(!f||!S) return;
