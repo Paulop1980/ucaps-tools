@@ -104,13 +104,29 @@ function _showLogin(sb, msg) {
   });
 }
 
-async function _checkSession() {
+let _checking = null;
+function _checkSession() {   // single-flight: the sign-in code form and the auth listener can both call this
+  if (!_checking) _checking = _doCheckSession().finally(() => { _checking = null; });
+  return _checking;
+}
+
+async function _doCheckSession() {
   const sb = await ucapsClient;
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { _showLogin(sb); return; }
   const email = (session.user.email || '').toLowerCase();
   const { data, error } = await sb.from('ucaps_users').select('email,name,is_admin').eq('email', email).maybeSingle();
-  if (error || !data) {
+  if (error) {   // a lookup failure is not the same as 'not approved' - say what went wrong
+    const gb = document.getElementById('ucaps-gate-body'); if (!gb) return;
+    gb.innerHTML = `
+      <div style="color:#fff;font-size:16px;margin-bottom:8px;">Couldn't check your account</div>
+      <div>Signed in as <b style="color:#fff">${_esc(email)}</b>, but the approved-list lookup failed: ${_esc(error.message || error)}.</div>
+      <button id="ucaps-gate-retry" style="${_btn}margin-top:18px;">Try again</button>`;
+    document.getElementById('ucaps-gate-retry').onclick = () => location.reload();
+    return;
+  }
+  if (!data) {
+    const gb0 = document.getElementById('ucaps-gate-body'); if (!gb0) return;
     document.getElementById('ucaps-gate-body').innerHTML = `
       <div style="color:#fff;font-size:16px;margin-bottom:8px;">Not on the approved list</div>
       <div><b style="color:#fff">${_esc(email)}</b> is signed in but hasn't been approved for UCAPS Tools. Ask a UCAPS admin to add you.</div>
