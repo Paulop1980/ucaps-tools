@@ -63,7 +63,7 @@ function _showLogin(sb, msg) {
       <input id="ucaps-gate-input" type="email" required autocomplete="email" placeholder="you@uml.edu"
         style="padding:11px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:#fff;font-size:14px;width:100%;outline:none;">
       <div id="ucaps-gate-error" style="font-size:12px;color:#F87171;${msg ? '' : 'display:none;'}">${_esc(msg)}</div>
-      <button style="${_btn}">Email me a sign-in link →</button>
+      <button style="${_btn}">Email me a sign-in code →</button>
       <div style="font-size:12px;color:rgba(255,255,255,.4);">Only approved UCAPS staff can sign in.</div>
     </form>`;
   const input = document.getElementById('ucaps-gate-input');
@@ -74,12 +74,33 @@ function _showLogin(sb, msg) {
     const btn = e.target.querySelector('button'); btn.disabled = true; btn.textContent = 'Sending…';
     const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin + location.pathname } });
     if (error) {
-      btn.disabled = false; btn.textContent = 'Email me a sign-in link →';
+      btn.disabled = false; btn.textContent = 'Email me a sign-in code →';
       const err = document.getElementById('ucaps-gate-error'); err.textContent = error.message; err.style.display = 'block';
       return;
     }
     body.innerHTML = `<div style="color:#fff;font-size:16px;margin-bottom:8px;">Check your email</div>
-      <div>We sent a sign-in link to <b style="color:#fff">${_esc(email)}</b>. Open it in this browser on this device.</div>`;
+      <div>We sent a message to <b style="color:#fff">${_esc(email)}</b>. Type the <b style="color:#fff">code</b> from it below, or open the link in this same browser.</div>
+      <form id="ucaps-code-form" style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+        <input id="ucaps-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Code from email"
+          style="padding:12px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:#fff;font-size:20px;letter-spacing:.25em;text-align:center;width:100%;outline:none;">
+        <div id="ucaps-code-error" style="font-size:12px;color:#F87171;display:none;"></div>
+        <button style="${_btn}">Sign in</button>
+        <div style="font-size:12px;color:rgba(255,255,255,.4);">No code in the email? Your mail filter may have opened the link first. Ask for a new email and use the code.</div>
+      </form>`;
+    const codeInput = document.getElementById('ucaps-code-input');
+    setTimeout(() => codeInput.focus(), 50);
+    document.getElementById('ucaps-code-form').addEventListener('submit', async ev => {
+      ev.preventDefault();
+      const token = codeInput.value.replace(/\s+/g, '');
+      const b = ev.target.querySelector('button'); b.disabled = true; b.textContent = 'Checking…';
+      const { error: vErr } = await sb.auth.verifyOtp({ email, token, type: 'email' });
+      if (vErr) {
+        b.disabled = false; b.textContent = 'Sign in';
+        const er = document.getElementById('ucaps-code-error'); er.textContent = 'That code did not work or has expired. Go back and request a new one.'; er.style.display = 'block';
+        return;
+      }
+      _checkSession();
+    });
   });
 }
 
