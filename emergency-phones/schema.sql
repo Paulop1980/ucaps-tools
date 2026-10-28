@@ -72,42 +72,42 @@ create policy "admins only" on public.ep_phone_details for all to authenticated
 
 revoke all on public.ep_phones, public.ep_phone_details from anon;
 
--- ───────────── Part 2 (optional): tester-only accounts ─────────────
--- Today ucaps_users is one list for every UCAPS tool, so anyone approved to test phones can also
--- read budget / payroll / RMA data stored in ucaps_store. This adds an optional `tools` list:
---   tools IS NULL                    → full access (every existing user keeps working unchanged)
+-- ───────────── Part 2: tester-only accounts (applied) ─────────────
+-- ucaps_users is one list for every UCAPS tool. The optional `tools` column limits an account:
+--   tools IS NULL                    → full access (all existing users)
 --   tools = '{emergency-phones}'     → can sign in, but only reaches emergency-phone data
--- Apply only when you're ready to add field testers to the approved list.
+-- Testers are added from the Emergency Phone Admin Console → Testers tab.
 
--- alter table public.ucaps_users add column if not exists tools text[];
---
--- -- "approved" now means full access (existing behaviour for all current users, whose tools is null)
--- create or replace function ucaps_private.is_approved()
--- returns boolean language sql stable security definer set search_path = '' as $$
---   select exists (select 1 from public.ucaps_users u
---                  where u.email = lower(coalesce(auth.jwt() ->> 'email', '')) and u.tools is null);
--- $$;
--- -- can use the phone-testing tool (full-access users + tester-only users)
--- create or replace function ucaps_private.is_ep_user()
--- returns boolean language sql stable security definer set search_path = '' as $$
---   select exists (select 1 from public.ucaps_users u
---                  where u.email = lower(coalesce(auth.jwt() ->> 'email', ''))
---                    and (u.tools is null or 'emergency-phones' = any(u.tools)));
--- $$;
--- revoke all on function ucaps_private.is_ep_user() from public, anon;
--- grant execute on function ucaps_private.is_ep_user() to authenticated;
---
--- -- everyone can read their own row (the sign-in gate needs it)
--- drop policy if exists "approved users read users" on public.ucaps_users;
--- create policy "approved users read users" on public.ucaps_users for select to authenticated
---   using (email = lower(coalesce(auth.jwt() ->> 'email', '')) or (select ucaps_private.is_approved()));
---
--- -- testers may touch only the phone-testing keys in the shared store
--- drop policy if exists "approved users" on public.ucaps_store;
--- create policy "approved users" on public.ucaps_store for all to authenticated
---   using  ((select ucaps_private.is_approved()) or ((select ucaps_private.is_ep_user()) and key like 'ucaps\_ep\_%'))
---   with check ((select ucaps_private.is_approved()) or ((select ucaps_private.is_ep_user()) and key like 'ucaps\_ep\_%'));
---
--- -- testers can read the roster (ep_phones), still not the details
--- drop policy if exists "approved read phones" on public.ep_phones;
--- create policy "approved read phones" on public.ep_phones for select to authenticated using ((select ucaps_private.is_ep_user()));
+alter table public.ucaps_users add column if not exists tools text[];
+
+-- "approved" now means full access
+create or replace function ucaps_private.is_approved()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.ucaps_users u
+                 where u.email = lower(coalesce(auth.jwt() ->> 'email', '')) and u.tools is null);
+$$;
+
+-- may use the phone-testing tool (full-access users + tester-only users)
+create or replace function ucaps_private.is_ep_user()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.ucaps_users u
+                 where u.email = lower(coalesce(auth.jwt() ->> 'email', ''))
+                   and (u.tools is null or 'emergency-phones' = any(u.tools)));
+$$;
+revoke all on function ucaps_private.is_ep_user() from public, anon;
+grant execute on function ucaps_private.is_ep_user() to authenticated;
+
+-- everyone can read their own row (the sign-in gate needs it)
+drop policy if exists "approved users read users" on public.ucaps_users;
+create policy "approved users read users" on public.ucaps_users for select to authenticated
+  using (email = lower(coalesce(auth.jwt() ->> 'email', '')) or (select ucaps_private.is_approved()));
+
+-- testers may touch only the phone-testing keys in the shared store
+drop policy if exists "approved users" on public.ucaps_store;
+create policy "approved users" on public.ucaps_store for all to authenticated
+  using  ((select ucaps_private.is_approved()) or ((select ucaps_private.is_ep_user()) and key like 'ucaps\_ep\_%'))
+  with check ((select ucaps_private.is_approved()) or ((select ucaps_private.is_ep_user()) and key like 'ucaps\_ep\_%'));
+
+-- testers can read the roster (ep_phones), never the details
+drop policy if exists "approved read phones" on public.ep_phones;
+create policy "approved read phones" on public.ep_phones for select to authenticated using ((select ucaps_private.is_ep_user()));

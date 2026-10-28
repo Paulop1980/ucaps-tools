@@ -266,7 +266,7 @@ function App() {
       </header>
 
       <nav style={{ background: NAVY_DARK, display: "flex", padding: "0 12px", gap: 2, flexWrap: "wrap" }}>
-        {[["dashboard", "Dashboard"], ["roster", "Roster"], ["attention", `Needs Attention${stats.fail ? ` (${stats.fail})` : ""}`], ["overdue", "Overdue"], ["import", "Import"]].map(([k, lab]) => (
+        {[["dashboard", "Dashboard"], ["roster", "Roster"], ["attention", `Needs Attention${stats.fail ? ` (${stats.fail})` : ""}`], ["overdue", "Overdue"], ["import", "Import"], ["testers", "Testers"]].map(([k, lab]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             background: tab === k ? "#f4f6f8" : "transparent", color: tab === k ? NAVY : "rgba(255,255,255,.8)",
             border: "none", borderRadius: tab === k ? "8px 8px 0 0" : 0, padding: "12px 18px", cursor: "pointer",
@@ -281,6 +281,7 @@ function App() {
         {tab === "roster" && <Roster roster={roster} results={results} onEdit={(p) => setEditing(p)} onAdd={() => setEditing(null)} onExportRoster={() => exportRoster(roster)} />}
         {tab === "attention" && <Attention roster={roster} results={results} />}
         {tab === "overdue" && <Overdue roster={roster} results={results} />}
+        {tab === "testers" && <Testers />}
         {tab === "import" && <Import onImport={handleImport} log={log} onClear={() => commitResults({}, [])} />}
       </main>
 
@@ -482,6 +483,77 @@ function Overdue({ roster, results }) {
           </div>
         ))}
         {list.length === 0 && <p style={{ ...muted, padding: 24 }}>Nothing overdue at this threshold.</p>}
+      </div>
+    </div>
+  );
+}
+
+function Testers() {
+  const [users, setUsers] = useState(null);
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = async () => {
+    try {
+      const sb = await ucapsClient;
+      const { data, error } = await sb.from("ucaps_users").select("email,name,is_admin,tools").order("email");
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (e) { setMsg({ err: true, text: "Couldn't load accounts: " + (e.message || e) }); setUsers([]); }
+  };
+  useEffect(() => { load(); }, []);
+  const add = async () => {
+    const em = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { setMsg({ err: true, text: "Enter a valid email address." }); return; }
+    setBusy(true); setMsg(null);
+    try {
+      const sb = await ucapsClient;
+      // insert (not upsert) so an existing full-access account can never be downgraded by accident
+      const { error } = await sb.from("ucaps_users").insert({ email: em, name: name.trim() || null, is_admin: false, tools: ["emergency-phones"] });
+      if (error) throw error;
+      setEmail(""); setName(""); setMsg({ text: em + " can now sign in and test phones." }); await load();
+    } catch (e) { setMsg({ err: true, text: /duplicate|already exists/i.test(e.message || "") ? "That email already has an account." : "Couldn't add: " + (e.message || e) }); }
+    setBusy(false);
+  };
+  const remove = async (em) => {
+    try {
+      const sb = await ucapsClient;
+      const { error } = await sb.from("ucaps_users").delete().eq("email", em).not("tools", "is", null);
+      if (error) throw error;
+      setMsg({ text: em + " removed." }); await load();
+    } catch (e) { setMsg({ err: true, text: "Couldn't remove: " + (e.message || e) }); }
+  };
+  const testers = (users || []).filter((u) => u.tools);
+  const staff = (users || []).filter((u) => !u.tools);
+  return (
+    <div>
+      <h2 style={h2}>Testers</h2>
+      <p style={{ ...muted, marginTop: 0 }}>Tester accounts can sign in to the testing app and log results. They can see phone locations only. They can't open the admin console or any other UCAPS tool's data.</p>
+      <div style={card}>
+        <h3 style={h3}>Add a tester</h3>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@uml.edu" style={{ ...input, flex: 2, minWidth: 200 }} />
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name (optional)" style={{ ...input, flex: 1, minWidth: 140 }} />
+          <button onClick={add} disabled={busy || !email.trim()} style={{ ...primaryBtn, opacity: busy || !email.trim() ? 0.5 : 1 }}>+ Add tester</button>
+        </div>
+        {msg && <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 600, background: msg.err ? "#fbe6e3" : "#e3f4e8", color: msg.err ? "#c0392b" : "#1a7d3c" }}>{msg.text}</div>}
+      </div>
+      <div style={{ ...card, marginTop: 16, padding: 0, overflow: "hidden" }}>
+        <div style={{ padding: "14px 18px", borderBottom: "1px solid #eceff1" }}><h3 style={{ ...h3, margin: 0 }}>Tester accounts ({testers.length})</h3></div>
+        {users === null && <p style={{ ...muted, padding: 18 }}>Loading…</p>}
+        {users !== null && testers.length === 0 && <p style={{ ...muted, padding: 18 }}>No tester accounts yet.</p>}
+        {testers.map((u) => (
+          <div key={u.email} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderBottom: "1px solid #eceff1", fontFamily: "'Public Sans',sans-serif", fontSize: 14 }}>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontWeight: 600, color: "#222" }}>{u.name || u.email}</div>{u.name && <div style={{ fontSize: 12, color: "#9aa3ad" }}>{u.email}</div>}</div>
+            <button onClick={() => remove(u.email)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "7px 14px", fontSize: 13 }}>Remove</button>
+          </div>
+        ))}
+      </div>
+      <div style={{ ...card, marginTop: 16 }}>
+        <h3 style={h3}>Full-access staff ({staff.length})</h3>
+        <p style={{ ...muted, marginTop: 0 }}>Managed in Register Tracker → Data &amp; settings → Approved users.</p>
+        {staff.map((u) => <div key={u.email} style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, padding: "5px 0", color: "#2c333a" }}>{u.name || u.email}{u.is_admin ? <span style={{ color: GOLD, background: NAVY, fontSize: 10.5, fontWeight: 700, padding: "1px 6px", borderRadius: 5, marginLeft: 8 }}>ADMIN</span> : null}</div>)}
       </div>
     </div>
   );
