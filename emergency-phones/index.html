@@ -8,7 +8,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.11/babel.min.js"></script>
 <script src="../ucaps_shared.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -50,7 +50,24 @@ const { useState, useEffect, useMemo, useRef, useCallback, Fragment } = React;
 const Papa = window.Papa;
 
 
-const PHONES = [];
+// Roster comes from Supabase after sign-in (table ep_phones, row-level security).
+// Nothing about the phones is stored in this file. Testers only receive location fields -
+// extensions, models, install notes and network info live in an admin-only table.
+let PHONES = [];
+async function loadRoster() {
+  await ucapsGate();
+  const sb = await ucapsClient;
+  const { data, error } = await sb.from("ep_phones")
+    .select("id,ord,loc,campus,building,floor,intext,lat,lng").range(0, 4999);
+  if (error) throw error;
+  const rows = (data || []).map((p) => ({
+    id: p.id, loc: p.loc || "", campus: p.campus || "", building: p.building || "", floor: p.floor || "",
+    intext: p.intext || "", lat: p.lat, lng: p.lng, _ord: p.ord == null ? 999999 : p.ord,
+  }));
+  rows.sort((a, b) => a._ord - b._ord || a.loc.localeCompare(b.loc));
+  rows.forEach((p, i) => { p.seq = i + 1; });
+  return rows;
+}
 
 const NAVY = "#003e7e";
 const NAVY_DARK = "#002a57";
@@ -112,6 +129,8 @@ function App() {
   const [results, setResults] = useState({});
   const [cycleStart, setCycleStart] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [rosterVer, setRosterVer] = useState(0);
+  const [rosterErr, setRosterErr] = useState(null);
   const [selId, setSelId] = useState(null);
   const [search, setSearch] = useState("");
   const [campus, setCampus] = useState("All");
@@ -126,6 +145,8 @@ function App() {
       "https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap";
     document.head.appendChild(link);
     (async () => {
+      try { PHONES = await loadRoster(); setRosterVer((v) => v + 1); }
+      catch (e) { console.warn("roster load failed", e); setRosterErr("Couldn't load the phone list. Check your connection and sign-in, then reload."); }
       setResults(await loadResults());
       const c = await loadCycle();
       setCycleStart(c && c.start ? c.start : null);
@@ -156,7 +177,7 @@ function App() {
   const campuses = useMemo(() => {
     const set = new Set(PHONES.map((p) => p.campus));
     return ["All", ...CAMPUS_ORDER.filter((c) => set.has(c))];
-  }, []);
+  }, [rosterVer]);
 
   const stats = useMemo(() => {
     let tested = 0, pass = 0, fail = 0;
@@ -167,7 +188,7 @@ function App() {
       if (s === "fail") fail++;
     });
     return { total: PHONES.length, tested, pass, fail, remaining: PHONES.length - tested };
-  }, [results]);
+  }, [results, rosterVer]);
 
   const filtered = useMemo(() => {
     let list = PHONES.filter((p) => {
@@ -176,7 +197,7 @@ function App() {
       if (statusFilter !== "all" && s !== statusFilter) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
-        const hay = `${p.loc} ${p.building} ${p.ext} ${p.campus} ${p.brand}`.toLowerCase();
+        const hay = `${p.loc} ${p.building} ${p.campus}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -190,7 +211,7 @@ function App() {
       });
     else list = [...list].sort((a, b) => a.seq - b.seq);
     return list;
-  }, [search, campus, statusFilter, sortBy, results]);
+  }, [search, campus, statusFilter, sortBy, results, rosterVer]);
 
   const openPhone = (id) => {
     setSelId(id);
@@ -224,6 +245,14 @@ function App() {
     return (
       <div style={{ ...wrap, alignItems: "center", justifyContent: "center", color: "#fff" }}>
         <div style={{ fontFamily: "'Public Sans',sans-serif", opacity: 0.8 }}>Loading…</div>
+      </div>
+    );
+  }
+
+  if (rosterErr) {
+    return (
+      <div style={{ ...wrap, alignItems: "center", justifyContent: "center", color: "#fff", padding: 24, textAlign: "center" }}>
+        <div style={{ fontFamily: "'Public Sans',sans-serif", maxWidth: 320, lineHeight: 1.5 }}>{rosterErr}</div>
       </div>
     );
   }
@@ -473,15 +502,13 @@ function DetailScreen({ phone, rec, position, onBack, onSave }) {
           </h2>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
             {phone.building && <Meta label="Building" value={phone.building + (phone.floor ? " / " + phone.floor : "")} />}
-            {phone.ext && <Meta label="Dial / Ext" value={phone.ext} />}
-            {phone.brand && <Meta label="Brand" value={phone.brand} />}
-            {phone.model && <Meta label="Model" value={phone.model} />}
-            {phone.conn && <Meta label="Connectivity" value={phone.conn} />}
           </div>
-          {phone.notes && (
-            <div style={{ marginTop: 12, fontFamily: "'Public Sans',sans-serif", fontSize: 12.5, color: "#6b747d", background: "#f4f6f8", padding: "8px 11px", borderRadius: 8, lineHeight: 1.4 }}>
-              <strong style={{ color: NAVY }}>Install note:</strong> {phone.notes}
-            </div>
+          {phone.lat != null && phone.lng != null && (
+            <a href={`https://www.google.com/maps/dir/?api=1&destination=${phone.lat},${phone.lng}&travelmode=walking`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ display: "inline-block", marginTop: 14, background: NAVY, color: "#fff", textDecoration: "none", fontFamily: "'Public Sans',sans-serif", fontWeight: 700, fontSize: 14, padding: "11px 18px", borderRadius: 10 }}>
+              📍 Locate phone (Google Maps)
+            </a>
           )}
         </div>
 
@@ -558,13 +585,13 @@ function ExportScreen({ results, stats, cycleStart, onBack, onNewCycle }) {
   const [confirmReset, setConfirmReset] = useState(false);
 
   const buildCSV = () => {
-    const headers = ["Seq","Location Description","Campus","Building","Interior/Exterior","Extension","Brand","Last Tested","Button/Dialing","Mic","Speaker","Lights","Status","Testing Notes"];
+    const headers = ["Seq","Location Description","Campus","Building","Interior/Exterior","Last Tested","Button/Dialing","Mic","Speaker","Lights","Status","Testing Notes"];
     const lines = [headers.join(",")];
     PHONES.forEach((p) => {
       const r = results[p.id] || {};
       const s = statusOf(r);
       const row = [
-        p.seq, p.loc, p.campus, p.building, p.intext, p.ext, p.brand,
+        p.seq, p.loc, p.campus, p.building, p.intext,
         r.lastTested ? fmtDate(r.lastTested) : "",
         r.button || "", r.mic || "", r.speaker || "", r.lights || "",
         STATUS_META[s].label, r.notes || "",

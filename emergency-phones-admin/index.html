@@ -8,7 +8,7 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.11/babel.min.js"></script>
 <script src="../ucaps_shared.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -51,31 +51,66 @@ const Papa = window.Papa;
 
 
 
-const BASE_PHONES = [];
+// Roster lives in Supabase (ep_phones = location, ep_phone_details = admin-only fields).
+// Nothing about the phones is stored in this file.
+const SENSITIVE = /([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}/; // IPv4 / MAC
+const DETAIL_KEYS = ["ext", "brand", "model", "conn", "mount", "buttons", "cameras", "speakers", "notes"];
+const nz = (v) => (v == null ? "" : String(v));
+async function loadRoster() {
+  const sb = await ucapsClient;
+  const [a, b] = await Promise.all([
+    sb.from("ep_phones").select("id,ord,loc,campus,building,floor,intext,lat,lng").range(0, 4999),
+    sb.from("ep_phone_details").select("id,ext,brand,model,conn,mount,buttons,cameras,speakers,notes").range(0, 4999),
+  ]);
+  if (a.error) throw a.error; if (b.error) throw b.error;
+  const det = {}; (b.data || []).forEach((d) => { det[d.id] = d; });
+  return (a.data || []).map((p) => {
+    const d = det[p.id] || {};
+    const o = { id: p.id, loc: nz(p.loc), campus: nz(p.campus), building: nz(p.building), floor: nz(p.floor), intext: nz(p.intext),
+      order: p.ord == null ? "" : p.ord, lat: p.lat == null ? "" : p.lat, lng: p.lng == null ? "" : p.lng };
+    DETAIL_KEYS.forEach((k) => { o[k] = nz(d[k]); });
+    return o;
+  });
+}
+async function savePhoneRemote(form, id) {
+  const sb = await ucapsClient;
+  const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
+  const txt = (v) => { const s = String(v ?? "").trim(); return s === "" ? null : s; };
+  const pub = { id, ord: num(form.order) == null ? null : Math.round(num(form.order)), loc: String(form.loc).trim(),
+    campus: txt(form.campus), building: txt(form.building), floor: txt(form.floor), intext: txt(form.intext),
+    lat: num(form.lat), lng: num(form.lng) };
+  const det = { id }; DETAIL_KEYS.forEach((k) => { det[k] = txt(form[k]); });
+  let r = await sb.from("ep_phones").upsert(pub); if (r.error) throw r.error;
+  r = await sb.from("ep_phone_details").upsert(det); if (r.error) throw r.error;
+}
+async function deletePhoneRemote(id) {
+  const sb = await ucapsClient;
+  const r = await sb.from("ep_phones").delete().eq("id", id); if (r.error) throw r.error;
+}
 
 const NAVY = "#003e7e";
 const NAVY_DARK = "#002a57";
 const GOLD = "#fdb515";
 const CAMPUS_ORDER = ["East", "North", "South", "ICC", "Off Campus", "Other"];
 
-const KEY = "ucaps_ep_admin_v1";        // admin-only: log + roster overlay
+const KEY = "ucaps_ep_admin_v1";        // admin-only: import log
 const RESULTS_KEY = "ucaps_ep_results_v1"; // SHARED with the field testing app
 async function loadState() {
   try {
     // results come from the shared key (written by the testing app + admin)
     let results = {};
     try { const rr = await window.storage.get(RESULTS_KEY); if (rr && rr.value) results = JSON.parse(rr.value); } catch (e) {}
-    // log + roster overlay live in the admin-only key
+    // import log lives in the admin-only key
     let admin = {};
     try { const ar = await window.storage.get(KEY); if (ar && ar.value) admin = JSON.parse(ar.value); } catch (e) {}
-    return { results, log: admin.log || [], roster: admin.roster || { overrides: {}, added: [], deleted: [] } };
+    return { results, log: admin.log || [] };
   } catch (e) { return {}; }
 }
 async function saveResultsShared(results) {
   try { await window.storage.set(RESULTS_KEY, JSON.stringify(results || {})); } catch (e) {}
 }
-async function saveAdmin(log, roster) {
-  try { await window.storage.set(KEY, JSON.stringify({ log: log || [], roster: roster || { overrides: {}, added: [], deleted: [] } })); } catch (e) {}
+async function saveAdmin(log) {
+  try { await window.storage.set(KEY, JSON.stringify({ log: log || [] })); } catch (e) {}
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -107,7 +142,9 @@ function App() {
   const [tab, setTab] = useState("dashboard");
   const [results, setResults] = useState({});
   const [log, setLog] = useState([]);
-  const [overlay, setOverlay] = useState({ overrides: {}, added: [], deleted: [] });
+  const [phones, setPhones] = useState([]);
+  const [denied, setDenied] = useState(false);
+  const [loadErr, setLoadErr] = useState(null);
   const [loaded, setLoaded] = useState(false);
   const [editing, setEditing] = useState(undefined); // undefined=closed, null=new, {phone}=edit
 
@@ -118,10 +155,13 @@ function App() {
     link.href = "https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&display=swap";
     document.head.appendChild(link);
     (async () => {
+      const u = await ucapsGate();
+      if (!u || !u.is_admin) { setDenied(true); setLoaded(true); return; }
+      try { setPhones(await loadRoster()); }
+      catch (e) { console.warn("roster load failed", e); setLoadErr("Couldn't load the phone roster: " + (e.message || e)); }
       const s = await loadState();
       setResults(s.results || {});
       setLog(s.log || []);
-      setOverlay(s.roster || { overrides: {}, added: [], deleted: [] });
       setLoaded(true);
     })();
     // Live refresh: pull shared field-test results periodically so the dashboard
@@ -136,35 +176,31 @@ function App() {
     return () => clearInterval(iv);
   }, []);
 
-  const commitResults = (r, l) => { setResults(r); setLog(l); saveResultsShared(r); saveAdmin(l, overlay); };
-  const commitOverlay = (o) => { setOverlay(o); saveAdmin(log, o); };
+  const commitResults = (r, l) => { setResults(r); setLog(l); saveResultsShared(r); saveAdmin(l); };
 
-  // effective roster = base (minus deleted, plus overrides) + custom additions, re-sorted & re-sequenced
+  // roster = phones from the database, ordered, re-sequenced
   const roster = useMemo(() => {
-    const del = new Set(overlay.deleted || []);
-    const base = BASE_PHONES.filter((p) => !del.has(p.id)).map((p) => ({ ...p, ...(overlay.overrides[p.id] || {}) }));
-    const customs = (overlay.added || []).filter((p) => !del.has(p.id));
-    let all = [...base, ...customs].map((p) => ({ ...p, _ord: (p.order === "" || p.order == null) ? 999999 : (Number(p.order) || 999999) }));
+    let all = phones.map((p) => ({ ...p, _ord: (p.order === "" || p.order == null) ? 999999 : (Number(p.order) || 999999) }));
     all.sort((a, b) => a._ord - b._ord || String(a.loc).localeCompare(String(b.loc)));
     all.forEach((p, i) => { p.seq = i + 1; });
     return all;
-  }, [overlay]);
+  }, [phones]);
 
-  const isCustom = (id) => (overlay.added || []).some((p) => p.id === id);
-
-  const upsertPhone = (form, editId) => {
-    if (editId) {
-      if (isCustom(editId)) commitOverlay({ ...overlay, added: overlay.added.map((p) => p.id === editId ? { ...p, ...form, id: editId } : p) });
-      else commitOverlay({ ...overlay, overrides: { ...overlay.overrides, [editId]: { ...form } } });
-    } else {
-      const id = "cust_" + Date.now();
-      commitOverlay({ ...overlay, added: [...(overlay.added || []), { ...form, id }] });
-    }
-    setEditing(undefined);
+  // returns an error message (form stays open) or null on success
+  const upsertPhone = async (form, editId) => {
+    const bad = ["loc", "campus", "building", "floor", ...DETAIL_KEYS].find((k) => SENSITIVE.test(String(form[k] ?? "")));
+    if (bad) return "IP and MAC addresses can't be stored here. Remove the network address from the field and save again.";
+    try {
+      const id = editId || ("ep_" + Math.random().toString(16).slice(2, 8));
+      await savePhoneRemote(form, id);
+      setPhones(await loadRoster());
+      setEditing(undefined);
+      return null;
+    } catch (e) { return "Couldn't save: " + (e.message || e); }
   };
-  const deletePhone = (id) => {
-    commitOverlay({ ...overlay, deleted: [...(overlay.deleted || []), id], added: (overlay.added || []).filter((p) => p.id !== id) });
-    setEditing(undefined);
+  const deletePhone = async (id) => {
+    try { await deletePhoneRemote(id); setPhones(await loadRoster()); setEditing(undefined); }
+    catch (e) { setLoadErr("Couldn't delete: " + (e.message || e)); setEditing(undefined); }
   };
 
   const stats = useMemo(() => {
@@ -215,6 +251,7 @@ function App() {
   };
 
   if (!loaded) return <div style={{ ...page, alignItems: "center", justifyContent: "center" }}><span style={{ color: "#fff" }}>Loading…</span></div>;
+  if (denied) return <div style={{ ...page, alignItems: "center", justifyContent: "center", padding: 24, textAlign: "center" }}><span style={{ color: "#fff", fontFamily: "'Public Sans',sans-serif", maxWidth: 360, lineHeight: 1.5 }}>The admin console is limited to UCAPS administrators. If you need access, ask an admin to mark your account as admin.</span></div>;
 
   return (
     <div style={page}>
@@ -239,15 +276,16 @@ function App() {
       </nav>
 
       <main style={{ flex: 1, overflowY: "auto", background: "#f4f6f8", padding: 22 }}>
+        {loadErr && <div style={{ background: "#fbe6e3", color: "#c0392b", padding: "10px 14px", borderRadius: 10, marginBottom: 14, fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 600 }}>{loadErr}</div>}
         {tab === "dashboard" && <Dashboard stats={stats} byCampus={byCampus} log={log} onExport={() => exportResults(results, roster)} />}
-        {tab === "roster" && <Roster roster={roster} results={results} isCustom={isCustom} onEdit={(p) => setEditing(p)} onAdd={() => setEditing(null)} onExportRoster={() => exportRoster(roster)} />}
+        {tab === "roster" && <Roster roster={roster} results={results} onEdit={(p) => setEditing(p)} onAdd={() => setEditing(null)} onExportRoster={() => exportRoster(roster)} />}
         {tab === "attention" && <Attention roster={roster} results={results} />}
         {tab === "overdue" && <Overdue roster={roster} results={results} />}
         {tab === "import" && <Import onImport={handleImport} log={log} onClear={() => commitResults({}, [])} />}
       </main>
 
       {editing !== undefined && (
-        <PhoneForm phone={editing} isCustom={editing ? isCustom(editing.id) : false}
+        <PhoneForm phone={editing}
           onSave={upsertPhone} onDelete={deletePhone} onClose={() => setEditing(undefined)} />
       )}
     </div>
@@ -324,7 +362,7 @@ function Dashboard({ stats, byCampus, log, onExport }) {
   );
 }
 
-function Roster({ roster, results, isCustom, onEdit, onAdd, onExportRoster }) {
+function Roster({ roster, results, onEdit, onAdd, onExportRoster }) {
   const [search, setSearch] = useState("");
   const [campus, setCampus] = useState("All");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -361,7 +399,7 @@ function Roster({ roster, results, isCustom, onEdit, onAdd, onExportRoster }) {
               <span style={{ fontFamily: "'Archivo',sans-serif", fontWeight: 800, color: NAVY, fontSize: 12.5, width: 38 }}>{String(p.seq).padStart(4, "0")}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontFamily: "'Public Sans',sans-serif", fontWeight: 600, fontSize: 14.5, color: "#222", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {p.loc}{isCustom(p.id) && <span style={{ fontSize: 10.5, fontWeight: 700, color: GOLD, background: NAVY, padding: "1px 6px", borderRadius: 5, marginLeft: 8, verticalAlign: "middle" }}>ADDED</span>}
+                  {p.loc}
                 </div>
                 <div style={{ fontFamily: "'Public Sans',sans-serif", fontSize: 11.5, color: "#9aa3ad" }}>{p.campus}{p.building ? " · " + p.building : ""}{p.ext ? " · " + p.ext : ""}</div>
               </div>
@@ -455,15 +493,19 @@ const FIELDS = [
   ["ext", "Extension / Dial", "text", false], ["brand", "Brand", "text", false], ["model", "Model", "text", false],
   ["conn", "Connectivity", "text", false], ["mount", "Mount", "text", false], ["buttons", "# Buttons", "text", false],
   ["cameras", "# Cameras", "text", false],
-  ["speakers", "Amplified Speakers", "text", false], ["notes", "Install Note", "textarea", false],
+  ["speakers", "Amplified Speakers", "text", false], ["lat", "Latitude (for Locate Phone)", "text", false], ["lng", "Longitude", "text", false],
+  ["notes", "Install Note (admin only - no IP/MAC)", "textarea", false],
 ];
 
-function PhoneForm({ phone, isCustom, onSave, onDelete, onClose }) {
+function PhoneForm({ phone, onSave, onDelete, onClose }) {
   const init = {}; FIELDS.forEach(([k]) => { init[k] = phone ? (phone[k] ?? "") : ""; });
   const [form, setForm] = useState(init);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const valid = String(form.loc).trim().length > 0;
+  const valid = String(form.loc).trim().length > 0 && !busy;
+  const submit = async () => { setBusy(true); setErr(null); const m = await onSave(form, phone ? phone.id : null); if (m) { setErr(m); setBusy(false); } };
 
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,20,45,.55)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16, zIndex: 50 }}>
@@ -493,6 +535,7 @@ function PhoneForm({ phone, isCustom, onSave, onDelete, onClose }) {
               </div>
             ))}
           </div>
+          {err && <div style={{ marginTop: 14, padding: "10px 14px", borderRadius: 10, background: "#fbe6e3", color: "#c0392b", fontFamily: "'Public Sans',sans-serif", fontSize: 13.5, fontWeight: 600 }}>{err}</div>}
         </div>
         <div style={{ borderTop: "1px solid #e8ebee", padding: "14px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
           <div>
@@ -507,7 +550,7 @@ function PhoneForm({ phone, isCustom, onSave, onDelete, onClose }) {
           </div>
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onClose} style={secondaryBtn}>Cancel</button>
-            <button disabled={!valid} onClick={() => onSave(form, phone ? phone.id : null)} style={{ ...primaryBtn, opacity: valid ? 1 : 0.45, cursor: valid ? "pointer" : "not-allowed" }}>{phone ? "Save changes" : "Add phone"}</button>
+            <button disabled={!valid} onClick={submit} style={{ ...primaryBtn, opacity: valid ? 1 : 0.45, cursor: valid ? "pointer" : "not-allowed" }}>{phone ? "Save changes" : "Add phone"}</button>
           </div>
         </div>
       </div>
@@ -576,7 +619,7 @@ function Import({ onImport, log, onClear }) {
           <button onClick={() => setConfirmClear(true)} style={{ ...ghostBtn, color: "#c0392b", borderColor: "#f0c9c4", padding: "11px 18px" }}>Clear consolidated results</button>
         ) : (
           <div style={{ ...card, borderLeft: "4px solid #c0392b" }}>
-            <p style={{ ...muted, marginTop: 0 }}>This wipes imported/merged test results on this device (your roster edits stay). Export the master CSV first if you need it.</p>
+            <p style={{ ...muted, marginTop: 0 }}>This wipes the consolidated test results (the phone roster is not affected). Export the master CSV first if you need it.</p>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={() => setConfirmClear(false)} style={secondaryBtn}>Cancel</button>
               <button onClick={() => { onClear(); setConfirmClear(false); setToast(null); }} style={{ ...primaryBtn, background: "#c0392b" }}>Clear results</button>

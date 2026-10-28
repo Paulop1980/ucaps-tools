@@ -18,7 +18,13 @@ ucaps-tools/              ← your GitHub repository root
 │   └── index.html        ← Reader Approver Lookup
 │
 ├── emergency-phones/
-│   └── index.html        ← Emergency Phone Testing app
+│   ├── index.html        ← Emergency Phone Testing app (field testers, mobile)
+│   └── schema.sql        ← database tables + security rules. The phone roster itself lives
+│                           only in Supabase (ep_phones / ep_phone_details) — never commit
+│                           extensions, IPs, MACs or install notes to this repo
+│
+├── emergency-phones-admin/
+│   └── index.html        ← Emergency Phone Admin Console (admins only: roster, imports, overdue)
 │
 ├── license-tracker/
 │   └── index.html        ← License & Maintenance Renewal Tracker
