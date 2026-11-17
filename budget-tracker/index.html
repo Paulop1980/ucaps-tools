@@ -340,11 +340,20 @@ a{ color:var(--lic); }
   <section class="tabpanel on" id="tab-overview">
     <div class="fund-block" id="ov-op-block">
       <div class="fund-block-hdr">
-        <h2>Fund 51161 — General Operating Fund</h2>
+        <h2>Fund 51161 — UCAPS Operating (L300801000)</h2>
         <span class="fund-recon-tag" id="ov-op-recon"></span>
       </div>
       <div id="ov-op-bar"></div>
       <div class="stats stats-6" id="ov-op-stats"></div>
+    </div>
+
+    <div class="fund-block" id="ov-is-block">
+      <div class="fund-block-hdr">
+        <h2>Fund 51161 — Integrated Security (L230800000)</h2>
+        <span class="fund-recon-tag" id="ov-is-recon"></span>
+      </div>
+      <div id="ov-is-bar"></div>
+      <div class="stats stats-6" id="ov-is-stats"></div>
     </div>
 
     <div class="fund-block" id="ov-pay-block">
@@ -356,7 +365,7 @@ a{ color:var(--lic); }
       <div class="stats stats-6" id="ov-pay-stats"></div>
     </div>
 
-    <div class="sec-head"><h2>Operating — by category</h2><span>paid, encumbered &amp; forecast per category</span></div>
+    <div class="sec-head"><h2>Fund 51161 — by category</h2><span>paid, encumbered &amp; forecast per category, UCAPS Operating then Integrated Security</span></div>
     <div class="tbl" id="ov-cat-tbl"></div>
 
     <div class="sec-head"><h2>Active items — status</h2><span>anything with paid or encumbered activity this cycle</span></div>
@@ -376,6 +385,16 @@ a{ color:var(--lic); }
 
   <!-- ===================== OPERATING BUDGET ===================== -->
   <section class="tabpanel" id="tab-operating">
+    <div class="controls" style="margin-bottom:12px;">
+      <div class="ctrl">
+        <label>Fund view</label>
+        <div class="seg" id="op-seg-dept">
+          <button data-d="ucaps" class="on">UCAPS Operating · L300801000</button>
+          <button data-d="is">Integrated Security · L230800000</button>
+        </div>
+      </div>
+    </div>
+    <div id="op-bar"></div>
     <div class="stats" id="op-stats"></div>
     <div class="controls">
       <input class="search" id="op-search" placeholder="Search vendor, notes, PO#…" />
@@ -658,7 +677,15 @@ var SEED_BUDGET = [
   notes:"To pay for KeyWatcher integration with Lenel.",internalNotes:"",licenseId:null,po:"",status:"Forecast",encumbered:0,paid:0}
 ];
 
-var BASE_BUDGET_DEFAULT = { operating:220408.5, payroll:77500 };   // payroll: FY27 starting budget for fund 52110 per the encumbrance report
+var BASE_BUDGET_DEFAULT = { operating:190408.5, security:30000, payroll:77500 };
+/* Fund 51161 is split across two DeptIDs. Each operating line item carries dept "ucaps" or "is". */
+var DEPTS = {
+  ucaps:{ budgetKey:"operating", label:"UCAPS Operating", deptId:"L300801000", fundTag:"51161" },
+  is:   { budgetKey:"security",  label:"Integrated Security", deptId:"L230800000", fundTag:"51161 · IS" }
+};
+var IS_DEFAULT_IDS = ["card-access-repairs","cam-repairs","ephone-repairs","intrusion-repairs","dispatch-repairs"];
+function itemDept(b){ return (b && b.dept==="is") ? "is" : "ucaps"; }
+function deptItems(d){ return budgetItems.filter(function(b){ return itemDept(b)===d; }); }   // payroll: FY27 starting budget for fund 52110 per the encumbrance report
 
 /* ============================================================
    PAYROLL WORKSHEET DETAIL — sourced from the FY27 budget draft
@@ -883,7 +910,7 @@ var addlStaff = [];
 var payrollPostings = [];
 var licItems = [];
 var baseBudget = clone(BASE_BUDGET_DEFAULT);
-var overrides = { operating:{enc:null,bal:null}, payroll:{enc:null,bal:null} };
+var overrides = { operating:{enc:null,bal:null}, security:{enc:null,bal:null}, payroll:{enc:null,bal:null} };
 var summit = { fileName:null, importedAt:null, matched:[], unmatchedRows:[], noActivityIds:[] };
 
 var LIC_STATUS_MIGRATE = { "Not Started":"Forecast","Quote Requested":"Forecast","Quote Received":"Forecast",
@@ -950,6 +977,7 @@ function normalizeBudget(list){
     if(!it.draws) it.draws=[];
     it.draws.forEach(function(d){ if(!d.status) d.status="Paid"; }); // migrate old draws (assumed paid)
     if(it.item===undefined) it.item="";
+    if(it.dept!=="is" && it.dept!=="ucaps") it.dept = IS_DEFAULT_IDS.indexOf(it.id)>-1 ? "is" : "ucaps";
     if(it.draws.length) recomputeItemDerived(it);
   });
   return list;
@@ -1023,6 +1051,8 @@ function loadAll(){
         overrides = s.overrides || { operating:{enc:null,bal:null}, payroll:{enc:null,bal:null} };
         if(!overrides.operating) overrides.operating={enc:null,bal:null};
         if(!overrides.payroll) overrides.payroll={enc:null,bal:null};
+        if(!overrides.security) overrides.security={enc:null,bal:null};
+        if(baseBudget.security==null) baseBudget.security = BASE_BUDGET_DEFAULT.security;
         summit = s.summit || summit;
         payrollPostings = (s.payrollPostings && s.payrollPostings.length) ? s.payrollPostings : clone(SEED_PAYROLL_POSTINGS);
         fy = s.fy || fy;
@@ -1046,13 +1076,17 @@ function renderCurrentTab(){ switchTab(activeTab); }
 /* ============================================================
    COMPUTED TOTALS
    ============================================================ */
-function opRequiredTotal(){ return budgetItems.reduce(function(a,b){return a+(Number(b.base)||0);},0); }
-function opRequiredIncTotal(){ return budgetItems.reduce(function(a,b){return a+(Number(b.required)||0);},0); }
-function opRequestedTotal(){ return budgetItems.reduce(function(a,b){return a+(Number(b.requested)||0);},0); }
+function opRequiredTotal(d){ return deptItems(d||opUI.dept).reduce(function(a,b){return a+(Number(b.base)||0);},0); }
+function opRequiredIncTotal(d){ return deptItems(d||opUI.dept).reduce(function(a,b){return a+(Number(b.required)||0);},0); }
+function opRequestedTotal(d){ return deptItems(d||opUI.dept).reduce(function(a,b){return a+(Number(b.requested)||0);},0); }
+function deptFundStats(d){
+  var k=DEPTS[d].budgetKey;
+  return fundStats(deptItems(d), function(b){return b.base;}, Number(baseBudget[k])||0, overrides[k]);
+}
 function payRequiredTotal(){ return payrollItems.reduce(function(a,b){return a+(Number(b.required)||0);},0); }
 function payRequestedTotal(){ return payrollItems.reduce(function(a,b){return a+(Number(b.requested)||0);},0); }
-function catTotals(cat){
-  var items = budgetItems.filter(function(b){return b.category===cat;});
+function catTotals(cat, d){
+  var items = budgetItems.filter(function(b){return b.category===cat && (!d || itemDept(b)===d);});
   return {
     base: items.reduce(function(a,b){return a+(Number(b.base)||0);},0),
     required: items.reduce(function(a,b){return a+(Number(b.required)||0);},0),
@@ -1089,7 +1123,7 @@ var reconFund = null;
 function openReconcile(fundKey){
   reconFund = fundKey;
   var o = overrides[fundKey] || {enc:null,bal:null};
-  var fundLabel = fundKey==="operating" ? "Fund 51161 — Operating" : "Fund 52110 — Payroll";
+  var fundLabel = fundKey==="operating" ? "Fund 51161 — UCAPS Operating (L300801000)" : (fundKey==="security" ? "Fund 51161 — Integrated Security (L230800000)" : "Fund 52110 — Payroll");
   document.getElementById("recon-modal").innerHTML =
     '<button class="x" data-action="recon-close">×</button>'+
     '<h3>Reconcile — '+fundLabel+'</h3>'+
@@ -1117,11 +1151,15 @@ function clearReconcile(){
    OVERVIEW TAB
    ============================================================ */
 function renderOverview(){
-  var opBase=Number(baseBudget.operating)||0;
-  var op = fundStats(budgetItems, function(b){return b.base;}, opBase, overrides.operating);
+  var op = deptFundStats("ucaps");
   document.getElementById("ov-op-bar").innerHTML = fundBarHtml(op);
   document.getElementById("ov-op-stats").innerHTML = fundStatTiles(op, "operating").map(statCardHtml).join("");
   document.getElementById("ov-op-recon").textContent = summit.importedAt ? "Reconciled to Summit" : "Not yet reconciled";
+
+  var sec = deptFundStats("is");
+  document.getElementById("ov-is-bar").innerHTML = fundBarHtml(sec);
+  document.getElementById("ov-is-stats").innerHTML = fundStatTiles(sec, "security").map(statCardHtml).join("");
+  document.getElementById("ov-is-recon").textContent = summit.importedAt ? "Reconciled to Summit" : "Not yet reconciled";
 
   var payBase=Number(baseBudget.payroll)||0;
   var pay = fundStats(payrollItems, function(p){return p.required;}, payBase, overrides.payroll);
@@ -1129,21 +1167,25 @@ function renderOverview(){
   document.getElementById("ov-pay-stats").innerHTML = fundStatTiles(pay, "payroll").map(statCardHtml).join("");
   document.getElementById("ov-pay-recon").textContent = summit.importedAt ? "Reconciled to Summit" : "Not yet reconciled";
 
-  var rows=CATEGORIES.map(function(c){
-    var t=catTotals(c);
+  function catRowHtml(c, d, prefix){
+    var t=catTotals(c, d);
     var forecast = t.base - t.paid - t.encumbered;
     return '<div class="item-grid" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;">'+
-      '<div class="vend">'+esc(c)+'</div>'+
+      '<div class="vend">'+esc((prefix||"")+c)+'</div>'+
       '<div class="ar mono">'+money(t.base)+'</div>'+
       '<div class="ar mono" style="color:#2f7d4f;">'+money(t.paid)+'</div>'+
       '<div class="ar mono" style="color:#1f5d86;">'+money(t.encumbered)+'</div>'+
       '<div class="ar mono" style="color:'+(forecast>0?'#9a5b00':'#8b8472')+';">'+money(forecast)+'</div></div>';
-  }).join("");
+  }
+  var rows=CATEGORIES.filter(function(c){ return budgetItems.some(function(b){return b.category===c && itemDept(b)==="ucaps";}); })
+      .map(function(c){ return catRowHtml(c,"ucaps",""); }).join("")+
+    CATEGORIES.filter(function(c){ return budgetItems.some(function(b){return b.category===c && itemDept(b)==="is";}); })
+      .map(function(c){ return catRowHtml(c,"is","Integrated Security — "); }).join("");
   document.getElementById("ov-cat-tbl").innerHTML=
     '<div class="item-grid head" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr;"><div>Category</div><div class="ar">Base cost</div><div class="ar">Paid</div><div class="ar">Encumbered</div><div class="ar">Forecast</div></div>'+rows;
 
   // active items — status (anything with paid or encumbered activity)
-  var active = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:"51161", paid:b.paid, encumbered:b.encumbered, status:b.status}; })
+  var active = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:DEPTS[itemDept(b)].fundTag, paid:b.paid, encumbered:b.encumbered, status:b.status}; })
     .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52110", paid:p.paid, encumbered:p.encumbered, status:p.status}; }))
     .filter(function(x){ return (Number(x.paid)||0)>0 || (Number(x.encumbered)||0)>0; })
     .sort(function(a,b){ return (Number(b.paid)||0)-(Number(a.paid)||0); });
@@ -1156,7 +1198,7 @@ function renderOverview(){
     }).join("") : '<div class="empty">No paid or encumbered activity recorded yet — enter amounts in Operating Budget / Payroll, or import a Summit report.</div>');
 
   // open encumbrances by vendor
-  var encRows = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:"51161", encumbered:b.encumbered}; })
+  var encRows = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, fund:DEPTS[itemDept(b)].fundTag, encumbered:b.encumbered}; })
     .concat(payrollItems.map(function(p){ return {vendor:"—", item:p.label, fund:"52110", encumbered:p.encumbered}; }))
     .filter(function(x){ return (Number(x.encumbered)||0)>0; })
     .sort(function(a,b){ return (Number(b.encumbered)||0)-(Number(a.encumbered)||0); });
@@ -1178,8 +1220,9 @@ function renderOverview(){
     ('<div style="color:#8b8472;">No Summit reconciliation run yet. <button class="btn tiny" data-action="goto-summit">Import a Summit report</button></div>');
 
   document.getElementById("ov-bottomline").innerHTML =
-    '<strong>Bottom line:</strong> Fund 51161 is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered '+
-    '('+money(op.forecast)+' unencumbered forecast still ahead). Fund 52110 is '+pctOf(pay.paid,pay.approved)+' paid with '+money(pay.balance)+' remaining '+
+    '<strong>Bottom line:</strong> UCAPS Operating is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered '+
+    '('+money(op.forecast)+' unencumbered forecast still ahead). Integrated Security is '+pctOf(sec.paid,sec.approved)+' paid with '+money(sec.balance)+' remaining '+
+    '('+money(sec.forecast)+' unencumbered forecast still ahead). Fund 52110 is '+pctOf(pay.paid,pay.approved)+' paid with '+money(pay.balance)+' remaining '+
     '('+money(pay.forecast)+' unencumbered forecast still ahead).';
 }
 /* Visual breakdown of Paid vs Encumbered vs Forecast against Approved Budget,
@@ -1249,11 +1292,12 @@ function renderRadarInto(elId){
    OPERATING BUDGET TAB — flat, searchable, filterable list
    ============================================================ */
 var STATUS_COLOR = { Forecast:"#9a5b00", Encumbrance:"#1f5d86", Paid:"#2f7d4f" };
-var opUI = { query:"", stat:"All", cat:"All", sortKey:"vendor", sortDir:1 };
+var opUI = { dept:"ucaps", query:"", stat:"All", cat:"All", sortKey:"vendor", sortDir:1 };
 var OP_GRID_COLS = "minmax(170px,1.8fr) minmax(210px,1.8fr) minmax(150px,1.1fr) minmax(110px,.7fr) minmax(90px,.7fr) minmax(90px,.7fr) minmax(90px,.7fr) 30px";
 
 function opMatchFilter(it){
   var q=opUI.query.toLowerCase();
+  if(itemDept(it)!==opUI.dept) return false;
   if(opUI.stat!=="All" && it.status!==opUI.stat) return false;
   if(opUI.cat!=="All" && it.category!==opUI.cat) return false;
   if(q && !((it.vendor+" "+(it.item||"")+" "+(it.notes||"")+" "+(it.po||"")).toLowerCase().indexOf(q)>-1)) return false;
@@ -1263,12 +1307,16 @@ function opSortBy(key){ if(opUI.sortKey===key) opUI.sortDir*=-1; else { opUI.sor
 
 function renderOperating(){
   var opReq=opRequiredTotal(), opInc=opRequiredIncTotal(), opReqAsk=opRequestedTotal();
-  var opBase=Number(baseBudget.operating)||0;
+  var dep=DEPTS[opUI.dept];
+  var opBase=Number(baseBudget[dep.budgetKey])||0;
+  var segD=document.getElementById("op-seg-dept");
+  if(segD) Array.prototype.forEach.call(segD.children,function(b){ b.classList.toggle("on", b.getAttribute("data-d")===opUI.dept); });
+  document.getElementById("op-bar").innerHTML = fundBarHtml(deptFundStats(opUI.dept));
   document.getElementById("op-stats").innerHTML=[
     {l:"Base cost (required)",v:money(opReq),s:"live sum of all line items",a:"#0a2240"},
     {l:"Incremental required",v:money(opInc),s:"increases needed above base cost",a:"#b3392f"},
     {l:"Requested (not approved)",v:money(opReqAsk),s:"discretionary asks — informational only",a:"#9a5b00"},
-    {l:"Base budget (editable)",v:money(opBase),s:"surplus/deficit: "+money(opBase-opReq),a:"#1f5d86",editKey:"operating"}
+    {l:dep.label+" budget (editable)",v:money(opBase),s:"surplus/deficit: "+money(opBase-opReq),a:"#1f5d86",editKey:dep.budgetKey}
   ].map(statCardHtml).join("");
 
   // keep the category dropdown populated
@@ -1318,7 +1366,7 @@ function renderOperating(){
   document.getElementById("op-table").innerHTML = head+body;
 
   document.getElementById("op-foot").innerHTML =
-    'Showing <strong>'+rows.length+'</strong> of '+budgetItems.length+' line items · '+
+    '<strong>'+esc(dep.label)+'</strong> ('+dep.deptId+') · Showing <strong>'+rows.length+'</strong> of '+deptItems(opUI.dept).length+' line items · '+
     'Grand total (base cost): <strong>'+money(opReq)+'</strong> · Base budget: <strong>'+money(opBase)+'</strong> · '+
     'Surplus/deficit: <strong style="color:'+((opBase-opReq)<0?'#b3392f':'#2f7d4f')+'">'+money(opBase-opReq)+'</strong> · '+
     'Requested (not approved): <strong>'+money(opReqAsk)+'</strong>';
@@ -1333,7 +1381,7 @@ function budFieldChange(id, field, value){
 }
 function budAdd(cat){
   if(!cat){ cat = (opUI.cat!=="All") ? opUI.cat : CATEGORIES[0]; }
-  var it={id:"bud-"+genId(),category:cat,vendor:"New vendor",item:"New line item",base:0,required:0,requested:0,notes:"",internalNotes:"",licenseId:null,po:"",status:"Forecast",encumbered:0,paid:0,draws:[]};
+  var it={id:"bud-"+genId(),dept:opUI.dept,category:cat,vendor:"New vendor",item:"New line item",base:0,required:0,requested:0,notes:"",internalNotes:"",licenseId:null,po:"",status:"Forecast",encumbered:0,paid:0,draws:[]};
   budgetItems.push(it);
   // clear active filters so the new item is guaranteed to be visible
   opUI.query=""; opUI.stat="All";
@@ -1387,6 +1435,9 @@ function renderManageItemModal(){
       '<div class="ef-field"><label>Required Δ</label><input class="ef-input" id="mi-required" type="number" step="0.01" value="'+it.required+'" /></div>'+
       '<div class="ef-field"><label>Requested</label><input class="ef-input" id="mi-requested" type="number" step="0.01" value="'+it.requested+'" /></div>'+
       '<div class="ef-field"><label>PO #</label><input class="ef-input" id="mi-po" type="text" value="'+esc(it.po||"")+'" /></div>'+
+      '<div class="ef-field"><label>Fund view (DeptID)</label><select class="ef-input" id="mi-dept">'+
+        ["ucaps","is"].map(function(d){ return '<option value="'+d+'"'+(itemDept(it)===d?" selected":"")+'>'+DEPTS[d].label+' · '+DEPTS[d].deptId+'</option>'; }).join("")+
+      '</select></div>'+
     '</div>';
 
   var manualBlock = hasInvoices ? '' :
@@ -1429,6 +1480,7 @@ function miSaveAmounts(){
   if(reqEl) it.required=parseFloat(reqEl.value)||0;
   if(reqdEl) it.requested=parseFloat(reqdEl.value)||0;
   if(poEl) it.po=poEl.value;
+  var deptEl=document.getElementById("mi-dept"); if(deptEl) it.dept=deptEl.value;
   var encEl=document.getElementById("mi-encumbered"), paidEl=document.getElementById("mi-paid");
   if(encEl && !(it.draws||[]).length) it.encumbered=parseFloat(encEl.value)||0;
   if(paidEl && !(it.draws||[]).length) it.paid=parseFloat(paidEl.value)||0;
@@ -2179,8 +2231,11 @@ async function exportBudgetExcel(){
   wb.created = new Date();
 
   var opBase = Number(baseBudget.operating)||0;
-  var op = fundStats(budgetItems, function(b){return b.base;}, opBase, overrides.operating);
-  var opRequested = opRequestedTotal();
+  var op = deptFundStats("ucaps");
+  var opRequested = opRequestedTotal("ucaps");
+  var secBase = Number(baseBudget.security)||0;
+  var sec = deptFundStats("is");
+  var secRequested = opRequestedTotal("is");
   var payBase = Number(baseBudget.payroll)||0;
   var pay = fundStats(payrollItems.concat(addlStaff||[]), function(p){return p.required;}, payBase, overrides.payroll);
   var payRequested = (payrollItems.concat(addlStaff||[])).reduce(function(a,b){return a+(Number(b.requested)||0);},0);
@@ -2194,18 +2249,22 @@ async function exportBudgetExcel(){
   s.getCell("A2").value = "Exported "+new Date().toLocaleDateString();
   s.getCell("A2").font = {italic:true, size:9, color:{argb:"FF8B8472"}};
   xlHeaderRow(s, 4, ["Account","Fund","Description","Required","Requested","Base Budget","Paid YTD","Encumbered","Surplus/Deficit","Surplus/Deficit w/ Requests"], XL_NAVY);
-  var opRow=5, payRow=6, totRow=7;
-  s.getCell(opRow,1).value="Operating"; s.getCell(opRow,2).value=51161; s.getCell(opRow,3).value="Operating Fund";
+  var opRow=5, secRow=6, payRow=7, totRow=8;
+  s.getCell(opRow,1).value="Operating"; s.getCell(opRow,2).value=51161; s.getCell(opRow,3).value="UCAPS Operating (L300801000)";
   xlMoneyCell(s,opRow,4,op.required); xlMoneyCell(s,opRow,5,opRequested); xlMoneyCell(s,opRow,6,opBase);
   xlMoneyCell(s,opRow,7,op.paid); xlMoneyCell(s,opRow,8,op.calcEnc);
   xlMoneyCell(s,opRow,9,opBase-op.required); xlMoneyCell(s,opRow,10,opBase-op.required-opRequested);
+  s.getCell(secRow,1).value="Operating"; s.getCell(secRow,2).value=51161; s.getCell(secRow,3).value="Integrated Security (L230800000)";
+  xlMoneyCell(s,secRow,4,sec.required); xlMoneyCell(s,secRow,5,secRequested); xlMoneyCell(s,secRow,6,secBase);
+  xlMoneyCell(s,secRow,7,sec.paid); xlMoneyCell(s,secRow,8,sec.calcEnc);
+  xlMoneyCell(s,secRow,9,secBase-sec.required); xlMoneyCell(s,secRow,10,secBase-sec.required-secRequested);
   s.getCell(payRow,1).value="Payroll"; s.getCell(payRow,2).value=52110; s.getCell(payRow,3).value="Gen Ops Contract Payroll";
   xlMoneyCell(s,payRow,4,pay.required); xlMoneyCell(s,payRow,5,payRequested); xlMoneyCell(s,payRow,6,payBase);
   xlMoneyCell(s,payRow,7,pay.paid); xlMoneyCell(s,payRow,8,pay.calcEnc);
   xlMoneyCell(s,payRow,9,payBase-pay.required); xlMoneyCell(s,payRow,10,payBase-pay.required-payRequested);
   s.getCell(totRow,3).value="Total"; s.getCell(totRow,3).font={bold:true};
   [4,5,6,7,8,9,10].forEach(function(col){
-    xlMoneyCell(s,totRow,col, (Number(s.getCell(opRow,col).value)||0) + (Number(s.getCell(payRow,col).value)||0));
+    xlMoneyCell(s,totRow,col, (Number(s.getCell(opRow,col).value)||0) + (Number(s.getCell(secRow,col).value)||0) + (Number(s.getCell(payRow,col).value)||0));
     s.getCell(totRow,col).font = {bold:true};
   });
   s.getRow(totRow).eachCell(function(c){ c.border = {top:{style:"thin", color:{argb:XL_LINE}}}; });
@@ -2215,7 +2274,8 @@ async function exportBudgetExcel(){
   o.columns = [{width:30},{width:13},{width:44},{width:12},{width:12},{width:28},{width:12},{width:13},{width:12}];
   var row = 1;
   CATEGORIES.forEach(function(cat){
-    var items = budgetItems.filter(function(b){ return b.category===cat; });
+    var items = budgetItems.filter(function(b){ return b.category===cat && itemDept(b)==="ucaps"; });
+    if(!items.length) return;
     xlHeaderRow(o, row, [cat,"Base","Notes","Required","Requested","Internal Notes","Paid","Encumbered","Status"], XL_PAPER, XL_NAVY);
     row++;
     var catStart = row;
@@ -2251,7 +2311,7 @@ async function exportBudgetExcel(){
   o.getCell(row,1).value = "Categorical Summary / Grand Total"; o.getCell(row,1).font = {bold:true, size:12, color:{argb:XL_NAVY}};
   row++;
   CATEGORIES.forEach(function(cat){
-    var t = catTotals(cat);
+    var t = catTotals(cat, "ucaps");
     o.getCell(row,1).value = cat;
     xlMoneyCell(o,row,2,t.base);
     row++;
@@ -2262,6 +2322,7 @@ async function exportBudgetExcel(){
     row++;
   }
   row++;
+  o.getCell(row,1).value = "UCAPS Operating (L300801000) only — see the Integrated Security sheet for L230800000"; o.getCell(row,1).font={italic:true, size:9}; row++;
   summaryLine("Grand Total — Operating", op.required, true);
   summaryLine("Base Operating Budget", opBase, false);
   summaryLine("Surplus/Deficit", opBase-op.required, true);
@@ -2273,6 +2334,33 @@ async function exportBudgetExcel(){
   summaryLine("Paid YTD", op.paid, false);
   summaryLine("Encumbered", op.calcEnc, false);
   summaryLine("Remaining Forecast", op.forecast, false);
+
+  /* ---------- Integrated Security sheet (fund 51161, DeptID L230800000) ---------- */
+  var isw = wb.addWorksheet("Integrated Security");
+  isw.columns = [{width:34},{width:13},{width:44},{width:12},{width:12},{width:28},{width:12},{width:13},{width:12}];
+  var irow = 1;
+  isw.getCell(irow,1).value = "Integrated Security — Fund 51161 / DeptID L230800000"; isw.getCell(irow,1).font = {bold:true, size:12, color:{argb:XL_NAVY}};
+  irow += 2;
+  var isItems = deptItems("is");
+  xlHeaderRow(isw, irow, ["Line item","Base","Notes","Required","Requested","Internal Notes","Paid","Encumbered","Status"], XL_PAPER, XL_NAVY);
+  irow++;
+  isItems.forEach(function(it){
+    isw.getCell(irow,1).value = (it.vendor && it.vendor!=="—") ? it.vendor+" — "+it.item : it.item;
+    xlMoneyCell(isw,irow,2,it.base); isw.getCell(irow,3).value = it.notes||"";
+    xlMoneyCell(isw,irow,4,it.required); xlMoneyCell(isw,irow,5,it.requested);
+    isw.getCell(irow,6).value = it.internalNotes||"";
+    xlMoneyCell(isw,irow,7,it.paid); xlMoneyCell(isw,irow,8,it.encumbered);
+    var sc = isw.getCell(irow,9); sc.value = it.status; sc.font = {color:{argb:xlStatusColor(it.status)}, bold:true};
+    irow++;
+  });
+  isw.getCell(irow,1).value = "Total"; isw.getCell(irow,1).font = {bold:true};
+  [[2,"base"],[4,"required"],[5,"requested"],[7,"paid"],[8,"encumbered"]].forEach(function(q){
+    var c = xlMoneyCell(isw, irow, q[0], isItems.reduce(function(a,it){ return a+(Number(it[q[1]])||0); },0)); c.font={bold:true};
+  });
+  irow += 2;
+  [["Integrated Security budget",secBase],["Paid YTD",sec.paid],["Encumbered",sec.encumbered],["Balance",sec.balance],["Unencumbered forecast",sec.forecast],["Projected surplus/deficit",sec.projectedSurplus]].forEach(function(l){
+    isw.getCell(irow,1).value = l[0]; xlMoneyCell(isw,irow,2,l[1]); irow++;
+  });
 
   /* ---------- Part-Time Payroll Budget sheet ---------- */
   var p = wb.addWorksheet("Part-Time Payroll Budget");
@@ -2413,6 +2501,8 @@ function handleJSONImport(file){
     licItems = normalizeLic(parsed.licItems || []);
     baseBudget = parsed.baseBudget || clone(BASE_BUDGET_DEFAULT);
     overrides = parsed.overrides || { operating:{enc:null,bal:null}, payroll:{enc:null,bal:null} };
+    if(!overrides.security) overrides.security={enc:null,bal:null};
+    if(baseBudget.security==null) baseBudget.security = BASE_BUDGET_DEFAULT.security;
     summit = parsed.summit || summit;
     payrollPostings = (parsed.payrollPostings && parsed.payrollPostings.length) ? parsed.payrollPostings : clone(SEED_PAYROLL_POSTINGS);
     if(parsed.fy) fy = Number(parsed.fy)||fy;
@@ -2603,22 +2693,24 @@ function ssKpiBlock(s){
 }
 function buildSupervisorSummaryHtml(){
   var todayStr = TODAY.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
-  var opBase=Number(baseBudget.operating)||0;
-  var op = fundStats(budgetItems, function(b){return b.base;}, opBase, overrides.operating);
+  var op = deptFundStats("ucaps");
+  var sec = deptFundStats("is");
   var payBase=Number(baseBudget.payroll)||0;
   var pay = fundStats(payrollItems, function(p){return p.required;}, payBase, overrides.payroll);
   var posted=postedTotal(), forecastRem=forecastTotal();
 
-  var opItemsForTables = budgetItems.map(function(b){ return {vendor:b.vendor, item:b.item, paid:b.paid, encumbered:b.encumbered, status:b.status}; });
+  var secItemsForTables = deptItems("is").map(function(b){ return {vendor:b.vendor, item:b.item, paid:b.paid, encumbered:b.encumbered, status:b.status}; });
+  var opItemsForTables = deptItems("ucaps").map(function(b){ return {vendor:b.vendor, item:b.item, paid:b.paid, encumbered:b.encumbered, status:b.status}; });
   var payItemsForTables = payrollItems.map(function(p){ return {vendor:"—", item:p.label, paid:p.paid, encumbered:p.encumbered, status:p.status}; });
 
   var reconciled = !!summit.importedAt;
   var reconTag = reconciled ? '<span class="ss-tag ss-tag-ok">Reconciled to Summit</span>' : '<span class="ss-tag ss-tag-warn">Not yet reconciled</span>';
   var reconLine = reconciled ? ('Last reconciled '+new Date(summit.importedAt).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})+' against '+esc(summit.fileName||"Summit")+'.') : 'Figures below have not yet been reconciled against a Summit export.';
 
-  var opEncCount = budgetItems.filter(function(b){return (Number(b.encumbered)||0)>0;}).length;
+  var opEncCount = deptItems("ucaps").filter(function(b){return (Number(b.encumbered)||0)>0;}).length;
   var opForecastNote = op.forecast>0.01 ? ('An additional '+money(op.forecast)+' remains forecasted but not yet on a PO.') : 'All remaining anticipated spend is already covered by open POs.';
-  var lede = 'Fund 51161 is '+pctOf(op.paid,op.approved)+' paid to date'+(opEncCount?(', with '+opEncCount+' vendor'+(opEncCount===1?"":"s")+' carrying open encumbrances totaling '+money(op.encumbered)):'')+'. '+opForecastNote+
+  var lede = 'UCAPS Operating (fund 51161) is '+pctOf(op.paid,op.approved)+' paid to date'+(opEncCount?(', with '+opEncCount+' vendor'+(opEncCount===1?"":"s")+' carrying open encumbrances totaling '+money(op.encumbered)):'')+'. '+opForecastNote+
+    ' Integrated Security (fund 51161, L230800000) is '+pctOf(sec.paid,sec.approved)+' paid with '+money(sec.balance)+' left after encumbrances.'+
     ' Fund 52110 is '+pctOf(pay.paid,pay.approved)+' paid, with '+money(pay.forecast)+' in remaining staffing forecast against a base budget of '+money(pay.approved)+'.';
 
   var sumItemPaid = payrollItems.reduce(function(a,it){ return a+(Number(it.paid)||0); },0);
@@ -2627,10 +2719,11 @@ function buildSupervisorSummaryHtml(){
     ('Note: sum of line-item Paid ('+money(sumItemPaid)+') differs from monthly postings total ('+money(posted)+') by '+money(postingVariance)+'.') :
     ('Monthly postings total ('+money(posted)+') matches the sum of line-item Paid.');
 
-  var opBottom = 'Fund 51161 is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered'+
+  var opBottom = 'UCAPS Operating is '+pctOf(op.paid,op.approved)+' paid with '+money(op.balance)+' remaining after paid and encumbered'+
     (op.forecast>0.01 ? (' ('+money(op.forecast)+' unencumbered forecast still ahead).') : ', with all remaining forecast already covered by POs.');
   var payBottom = 'Fund 52110 has '+money(pay.balance)+' remaining against a '+money(pay.approved)+' base budget, with '+money(pay.forecast)+' in forecasted staffing costs still ahead.';
-  var bottomLine = opBottom+' '+payBottom+' '+(reconciled?'All figures reconcile to the last Summit import.':'Figures have not yet been reconciled against Summit this cycle.');
+  var secBottom = 'Integrated Security has '+money(sec.balance)+' remaining against a '+money(sec.approved)+' budget'+(sec.forecast>0.01?(', with '+money(sec.forecast)+' in unencumbered forecast still ahead.'):'.');
+  var bottomLine = opBottom+' '+secBottom+' '+payBottom+' '+(reconciled?'All figures reconcile to the last Summit import.':'Figures have not yet been reconciled against Summit this cycle.');
 
   return ''+
   '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>UCAPS FY'+fy+' Supervisor Summary</title>'+
@@ -2676,10 +2769,17 @@ function buildSupervisorSummaryHtml(){
   '<p class="ss-lede">'+lede+'</p>'+
 
   '<div class="ss-fund">'+
-  '<div class="ss-fund-hdr"><h2>Fund 51161 &mdash; General Operating Fund</h2>'+reconTag+'</div>'+
+  '<div class="ss-fund-hdr"><h2>Fund 51161 &mdash; UCAPS Operating (L300801000)</h2>'+reconTag+'</div>'+
   ssKpiBlock(op)+
   '<h3>Active items &mdash; status</h3>'+ssActiveItemsHtml(opItemsForTables)+
   '<h3>Open encumbrances by vendor</h3>'+ssEncumbrancesHtml(opItemsForTables)+
+  '</div>'+
+
+  '<div class="ss-fund">'+
+  '<div class="ss-fund-hdr"><h2>Fund 51161 &mdash; Integrated Security (L230800000)</h2>'+reconTag+'</div>'+
+  ssKpiBlock(sec)+
+  '<h3>Active items &mdash; status</h3>'+ssActiveItemsHtml(secItemsForTables)+
+  '<h3>Open encumbrances by vendor</h3>'+ssEncumbrancesHtml(secItemsForTables)+
   '</div>'+
 
   '<div class="ss-fund">'+
@@ -2764,6 +2864,8 @@ document.addEventListener("click",function(ev){
     else if(act==="fc-remove"){ fcRemove(id); }
     return;
   }
+  var deptSeg=ev.target.closest("#op-seg-dept button");
+  if(deptSeg){ opUI.dept=deptSeg.getAttribute("data-d"); opUI.cat="All"; var cs=document.getElementById("op-sel-cat"); if(cs) cs.value="All"; renderOperating(); return; }
   var opSeg=ev.target.closest("#op-seg-status button");
   if(opSeg){ opUI.stat=opSeg.getAttribute("data-s"); Array.prototype.forEach.call(opSeg.parentNode.children,function(b){b.classList.remove("on");}); opSeg.classList.add("on"); renderOperating(); return; }
   var seg=ev.target.closest("#lic-seg-cat button");
@@ -2784,7 +2886,7 @@ document.addEventListener("change",function(ev){
   if(el.id==="lic-sel-status"){ licUI.stat=el.value; renderLicTable(); return; }
   if(el.id==="lic-sel-sort"){ licUI.sortBy=el.value; renderLicTable(); return; }
   if(el.id==="op-sel-cat"){ opUI.cat=el.value; renderOperating(); return; }
-  if(el.id==="mi-base"||el.id==="mi-required"||el.id==="mi-requested"||el.id==="mi-encumbered"||el.id==="mi-paid"||el.id==="mi-po"){ miSaveAmounts(); return; }
+  if(el.id==="mi-base"||el.id==="mi-required"||el.id==="mi-requested"||el.id==="mi-encumbered"||el.id==="mi-paid"||el.id==="mi-po"||el.id==="mi-dept"){ miSaveAmounts(); return; }
   if(el.id==="att-file-input"){ if(el.files && el.files[0]) handleFileChosen(el.files[0]); return; }
   if(el.id==="json-file-input"){ if(el.files && el.files[0]) handleJSONImport(el.files[0]); return; }
   if(el.id==="summit-file-input"){ if(el.files && el.files[0]) summitHandleFile(el.files[0]); return; }
