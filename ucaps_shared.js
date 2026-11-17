@@ -180,6 +180,7 @@ const db = {
     } catch (e) { console.warn('db.del failed', e); }
   }
 };
+window.db = db;  // budget-tracker checks window.db; a top-level const is not a window property
 
 /* ─── database setup (already applied; kept for reference) ──
    See register-tracker/schema.sql for ucaps_users and the
